@@ -17,14 +17,14 @@ const PASSWORDS = {
 };
 
 const NAV = [
-  { id: "owner", label: "Dashboard Owner", icon: "â™•", page: "ownerPage" },
-  { id: "crm", label: "CRM", icon: "â˜Ž", page: "crmPage" },
-  { id: "marketing", label: "Marketing & Ads", icon: "â—Ž", page: "marketingPage" },
-  { id: "content", label: "Content Creator", icon: "âœŽ", page: "contentPage" },
-  { id: "medis", label: "Tim Medis", icon: "âœš", page: "medisPage" },
-  { id: "inventory", label: "Inventory", icon: "â–¦", page: "inventoryPage" },
-  { id: "reports", label: "Reports", icon: "â–£", page: "reportsPage" },
-  { id: "settings", label: "Settings", icon: "âš™", page: "settingsPage" }
+  { id: "owner", label: "Dashboard Owner", icon: "&#9813;", page: "ownerPage" },
+  { id: "crm", label: "CRM", icon: "&#9742;", page: "crmPage" },
+  { id: "marketing", label: "Marketing & Ads", icon: "&#9678;", page: "marketingPage" },
+  { id: "content", label: "Content Creator", icon: "&#9998;", page: "contentPage" },
+  { id: "medis", label: "Tim Medis", icon: "&#10010;", page: "medisPage" },
+  { id: "inventory", label: "Inventory", icon: "&#9638;", page: "inventoryPage" },
+  { id: "reports", label: "Reports", icon: "&#9635;", page: "reportsPage" },
+  { id: "settings", label: "Settings", icon: "&#9881;", page: "settingsPage" }
 ];
 
 let state = loadState();
@@ -631,7 +631,7 @@ function renderSettings() {
       <div class="three-col">
         <div>
           <strong>Android</strong>
-          <p>Buka aplikasi via Chrome dari localhost atau HTTPS, lalu tap tombol install â‡© atau menu Add to Home screen.</p>
+          <p>Buka aplikasi via Chrome dari localhost atau HTTPS, lalu tap tombol install atau menu Add to Home screen.</p>
         </div>
         <div>
           <strong>iPhone</strong>
@@ -870,7 +870,7 @@ function getMedisKpis() {
 function kanban() {
   return ["Idea", "Script", "Design", "Editing", "Revision", "Approved", "Posted"].map(status => `
     <div class="kanban-card"><h3>${status}</h3>
-      ${state.content.filter(x => x.status === status).map(x => `<div class="kanban-item"><strong>${escapeHtml(x.title)}</strong><br><small>${escapeHtml(x.platform)} Â· ${escapeHtml(x.publishDate)}</small></div>`).join("") || "<small>Kosong</small>"}
+      ${state.content.filter(x => x.status === status).map(x => `<div class="kanban-item"><strong>${escapeHtml(x.title)}</strong><br><small>${escapeHtml(x.platform)} - ${escapeHtml(x.publishDate)}</small></div>`).join("") || "<small>Kosong</small>"}
     </div>`).join("");
 }
 
