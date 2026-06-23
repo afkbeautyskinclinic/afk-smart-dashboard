@@ -1,5 +1,5 @@
 ﻿const CONFIG = {
-  GOOGLE_APPS_SCRIPT_URL: "",
+  GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxXHnrGL7pFezEXAfa42bqKwVPt5CLKtZXJFPNXg7hrNpdoi27J0lHFCdUGCXK1WqG8/exec",
   GOOGLE_APPS_SCRIPT_TOKEN: ""
 };
 
@@ -73,7 +73,9 @@ function defaultState() {
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
       sources: "Instagram Ads, TikTok Ads, Database, Referral, Walk In",
-      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
+      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp",
+      backendUrl: "",
+      backendToken: ""
     },
     crm: [
       lead("2026-06-17", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Qualified", "Hot", "2026-06-24", "Ingin konsultasi body contour", 2500000, "Butuh follow up cepat", ""),
@@ -650,6 +652,8 @@ function renderSettings() {
         ${textarea("treatments", "Treatment list", state.settings.treatments)}
         ${textarea("sources", "Source lead list", state.settings.sources)}
         ${textarea("platforms", "Platform list", state.settings.platforms)}
+        ${input("backendUrl", "Google Apps Script Web App URL", "url", state.settings.backendUrl || "")}
+        ${input("backendToken", "Google Apps Script Token", "password", state.settings.backendToken || "")}
       </div>
       <div class="form-actions">
         <button class="primary-button">Simpan Settings</button>
@@ -889,18 +893,19 @@ function exportCsv(dataset) {
 }
 
 async function syncToGoogleSheets() {
-  if (!CONFIG.GOOGLE_APPS_SCRIPT_URL) {
-    toast("Isi CONFIG.GOOGLE_APPS_SCRIPT_URL untuk mengaktifkan sync.");
+  const backend = getBackendConfig();
+  if (!backend.url) {
+    toast("Isi Google Apps Script Web App URL di Settings untuk mengaktifkan sync.");
     return;
   }
 
   try {
-    const response = await fetch(CONFIG.GOOGLE_APPS_SCRIPT_URL, {
+    const response = await fetch(backend.url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "sync",
-        token: CONFIG.GOOGLE_APPS_SCRIPT_TOKEN,
+        token: backend.token,
         data: {
           crm: state.crm,
           marketing: state.marketing,
@@ -920,15 +925,16 @@ async function syncToGoogleSheets() {
 }
 
 async function fetchFromGoogleSheets() {
-  if (!CONFIG.GOOGLE_APPS_SCRIPT_URL) {
-    toast("Isi CONFIG.GOOGLE_APPS_SCRIPT_URL untuk mengambil data.");
+  const backend = getBackendConfig();
+  if (!backend.url) {
+    toast("Isi Google Apps Script Web App URL di Settings untuk mengambil data.");
     return null;
   }
 
   try {
-    const url = new URL(CONFIG.GOOGLE_APPS_SCRIPT_URL);
+    const url = new URL(backend.url);
     url.searchParams.set("action", "fetch");
-    if (CONFIG.GOOGLE_APPS_SCRIPT_TOKEN) url.searchParams.set("token", CONFIG.GOOGLE_APPS_SCRIPT_TOKEN);
+    if (backend.token) url.searchParams.set("token", backend.token);
 
     const response = await fetch(url.toString());
     const result = await response.json();
@@ -947,6 +953,13 @@ async function fetchFromGoogleSheets() {
     toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
   }
+}
+
+function getBackendConfig() {
+  return {
+    url: state.settings.backendUrl || CONFIG.GOOGLE_APPS_SCRIPT_URL,
+    token: state.settings.backendToken || CONFIG.GOOGLE_APPS_SCRIPT_TOKEN
+  };
 }
 
 function searchRows(rows, keys) {
@@ -990,5 +1003,6 @@ function toast(message) {
 function applyBrandSettings() {
   document.documentElement.style.setProperty("--pink", state.settings.primaryColor || "#F81894");
 }
+
 
 
