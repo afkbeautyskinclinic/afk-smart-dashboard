@@ -1,9 +1,10 @@
 ﻿const CONFIG = {
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxXHnrGL7pFezEXAfa42bqKwVPt5CLKtZXJFPNXg7hrNpdoi27J0lHFCdUGCXK1WqG8/exec",
-  GOOGLE_APPS_SCRIPT_TOKEN: ""
+  GOOGLE_APPS_SCRIPT_TOKEN: "839be6bf-ea86-43bc-93b4-97ce4edd4c0a-e66327aa-c9ac-43b6-91b4-349335bd5b85"
 };
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
+const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const SETTINGS_REVISION = "2026-06-24-source-campaign-medical-media-update";
 const DEFAULT_PIC_LIST = "Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
@@ -37,6 +38,8 @@ let activePage = currentRole === "Owner" ? "owner" : "crm";
 let charts = {};
 let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
+let autoSyncTimer = null;
+let autoSyncPaused = false;
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -78,6 +81,7 @@ function init() {
   bindGlobalEvents();
   initInstallExperience();
   registerServiceWorker();
+  initAutoSync();
   renderAll();
   if (!state.session.authenticated) openLogin(currentRole);
 }
@@ -164,6 +168,34 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  scheduleAutoSync();
+}
+
+function initAutoSync() {
+  window.addEventListener("online", () => scheduleAutoSync(300));
+  const syncStatus = getSyncStatus();
+  if (syncStatus.pending) scheduleAutoSync(1200);
+}
+
+function scheduleAutoSync(delay = 1400) {
+  if (autoSyncPaused) return;
+  const backend = getBackendConfig();
+  if (!backend.url || !backend.token) return;
+  setSyncStatus({ pending: true, lastQueuedAt: new Date().toISOString() });
+  clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(() => syncToGoogleSheets({ silent: true, source: "auto" }), delay);
+}
+
+function getSyncStatus() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_STATUS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function setSyncStatus(nextStatus) {
+  localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify({ ...getSyncStatus(), ...nextStatus }));
 }
 
 function migrateTreatmentNames(targetState) {
@@ -1236,11 +1268,11 @@ function csvCell(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
-async function syncToGoogleSheets() {
+async function syncToGoogleSheets(options = {}) {
   const backend = getBackendConfig();
   if (!backend.url) {
-    toast("Isi Google Apps Script Web App URL di Settings untuk mengaktifkan sync.");
-    return;
+    if (!options.silent) toast("Isi Google Apps Script Web App URL di Settings untuk mengaktifkan sync.");
+    return false;
   }
 
   try {
@@ -1262,9 +1294,13 @@ async function syncToGoogleSheets() {
     });
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Sync gagal.");
-    toast("Data berhasil disinkronkan ke Google Sheets.");
+    setSyncStatus({ pending: false, lastSuccessAt: new Date().toISOString(), lastError: "" });
+    if (!options.silent) toast("Data berhasil disinkronkan ke Google Sheets.");
+    return true;
   } catch (error) {
-    toast(`Sync Google Sheets gagal: ${error.message}`);
+    setSyncStatus({ pending: true, lastError: error.message, lastFailedAt: new Date().toISOString() });
+    if (!options.silent) toast(`Sync Google Sheets gagal: ${error.message}`);
+    return false;
   }
 }
 
@@ -1291,11 +1327,15 @@ async function fetchFromGoogleSheets() {
     };
     normalizeDashboardState(state);
     state.settingsRevision = SETTINGS_REVISION;
+    autoSyncPaused = true;
     saveState();
+    autoSyncPaused = false;
+    setSyncStatus({ pending: false, lastFetchAt: new Date().toISOString(), lastError: "" });
     renderAll();
     toast("Data berhasil diambil dari Google Sheets.");
     return result.data;
   } catch (error) {
+    autoSyncPaused = false;
     toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
   }
@@ -1354,6 +1394,12 @@ function toast(message) {
 function applyBrandSettings() {
   document.documentElement.style.setProperty("--pink", state.settings.primaryColor || "#F81894");
 }
+
+
+
+
+
+
 
 
 
