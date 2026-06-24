@@ -36,6 +36,7 @@ let currentRole = state.session.role || "Owner";
 let activePage = currentRole === "Owner" ? "owner" : "crm";
 let charts = {};
 let deferredInstallPrompt = null;
+let pdfExportInProgress = false;
 
 const els = {
   navList: document.getElementById("navList"),
@@ -839,15 +840,21 @@ function formFiles(form) {
 
 function bindExports() {
   document.querySelectorAll("[data-export]").forEach(button => {
+    if (button.dataset.exportBound === "true") return;
+    button.dataset.exportBound = "true";
     button.addEventListener("click", () => exportCsv(button.dataset.export));
   });
   document.querySelectorAll("[data-export-pdf]").forEach(button => {
+    if (button.dataset.exportPdfBound === "true") return;
+    button.dataset.exportPdfBound = "true";
     button.addEventListener("click", () => exportPdf(button.dataset.exportPdf));
   });
 }
 
 function bindDeletes() {
   document.querySelectorAll("[data-delete]").forEach(button => {
+    if (button.dataset.deleteBound === "true") return;
+    button.dataset.deleteBound = "true";
     button.addEventListener("click", () => {
       const dataset = button.dataset.delete;
       const index = Number(button.dataset.index);
@@ -862,6 +869,8 @@ function bindDeletes() {
 
 function bindOwnerNotes() {
   document.querySelectorAll("[data-note-dataset]").forEach(inputEl => {
+    if (inputEl.dataset.noteBound === "true") return;
+    inputEl.dataset.noteBound = "true";
     inputEl.addEventListener("change", () => {
       const dataset = inputEl.dataset.noteDataset;
       const index = Number(inputEl.dataset.index);
@@ -997,8 +1006,14 @@ function exportCsv(dataset) {
 }
 
 function exportPdf(dataset) {
+  if (pdfExportInProgress) {
+    toast("Export PDF sedang berjalan. Tutup preview PDF sebelumnya dulu.");
+    return;
+  }
+
   const sections = getExportSections(dataset).filter(section => section.rows.length);
   if (!sections.length) return toast("Belum ada data untuk diexport.");
+  pdfExportInProgress = true;
 
   const title = `AFK Beauty - ${exportTitle(dataset)}`;
   const printedAt = new Date().toLocaleString("id-ID");
@@ -1044,10 +1059,23 @@ function exportPdf(dataset) {
     </html>`);
   doc.close();
 
+  let cleanupTimer = null;
+  const cleanupPrintFrame = () => {
+    if (cleanupTimer) clearTimeout(cleanupTimer);
+    frame.remove();
+    pdfExportInProgress = false;
+  };
+  frame.contentWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
+  cleanupTimer = setTimeout(cleanupPrintFrame, 60000);
+
   setTimeout(() => {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    setTimeout(() => frame.remove(), 1200);
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch (error) {
+      cleanupPrintFrame();
+      toast("Export PDF gagal dibuka. Coba ulangi sekali lagi.");
+    }
   }, 250);
   toast("Membuka dialog print. Pilih Save as PDF untuk export PDF.");
 }
