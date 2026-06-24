@@ -4,9 +4,13 @@
 };
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
-const SETTINGS_REVISION = "2026-06-24-pic-treatment-update";
+const SETTINGS_REVISION = "2026-06-24-source-campaign-medical-media-update";
 const DEFAULT_PIC_LIST = "Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
+const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
+const CAMPAIGN_RENAMES = {
+  "Glow Booster June": "Skin Barrier Expert"
+};
 const PASSWORDS = {
   Owner: "owner123",
   CRM: "crm123",
@@ -72,7 +76,7 @@ function defaultState() {
       divisions: "CRM, Digital Marketing, Design Content, Medis, Inventory",
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
-      sources: "Instagram Ads, TikTok Ads, Database, Referral, Walk In",
+      sources: DEFAULT_SOURCE_LIST,
       platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp",
       backendUrl: "",
       backendToken: ""
@@ -85,7 +89,7 @@ function defaultState() {
       lead("2026-06-21", "LD-1005", "SA", "Perempuan", "Bogor", "628121110005", "Mini Surgery", "Show Up", "Warm", "2026-06-26", "Minta dokter perempuan", 950000, "Slot dokter terbatas", "")
     ],
     marketing: [
-      campaign("2026-06-17", "Meta Ads", "Glow Booster June", "Lead Generation", 1800000, 32000, 980, 85, 42, 20, 12, 21500000, "Creative before-after paling kuat", ""),
+      campaign("2026-06-17", "Meta Ads", "Skin Barrier Expert", "Lead Generation", 1800000, 32000, 980, 85, 42, 20, 12, 21500000, "Creative before-after paling kuat", ""),
       campaign("2026-06-18", "TikTok Ads", "Acne Clear Story", "Messages", 1250000, 41000, 1540, 76, 33, 18, 9, 12600000, "Hook dokter perform baik", ""),
       campaign("2026-06-19", "Google Ads", "Vaser Search High Intent", "Search", 2100000, 8200, 440, 38, 29, 16, 8, 78000000, "Keyword mahal tapi ROAS tinggi", ""),
       campaign("2026-06-20", "Meta Ads", "Facial Promo Weekend", "Traffic", 950000, 26000, 760, 64, 24, 14, 7, 7200000, "Perlu landing chat lebih cepat", "")
@@ -120,8 +124,8 @@ function campaign(date, platform, name, objective, spend, impressions, clicks, l
 function content(date, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status) {
   return { date, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status, ownerNote: "" };
 }
-function treatment(date, patientId, bookingId, treatmentName, doctor, therapist, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, ownerNote) {
-  return { date, patientId, bookingId, treatmentName, doctor, therapist, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, ownerNote };
+function treatment(date, patientId, bookingId, treatmentName, doctor, nurseBeautician, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, ownerNote, mediaLinks = "") {
+  return { date, patientId, bookingId, treatmentName, doctor, nurseBeautician, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, mediaLinks, ownerNote };
 }
 function stock(id, name, category, unit, supplier, initial, inQty, outQty, minimum, expired, bottleneck, ownerNote) {
   return { id, name, category, unit, supplier, initial, inQty, outQty, minimum, expired, bottleneck, ownerNote };
@@ -132,13 +136,8 @@ function loadState() {
   if (!saved) return defaultState();
   try {
     const loadedState = { ...defaultState(), ...JSON.parse(saved) };
+    normalizeDashboardState(loadedState);
     if (loadedState.settingsRevision !== SETTINGS_REVISION) {
-      loadedState.settings = {
-        ...loadedState.settings,
-        pics: DEFAULT_PIC_LIST,
-        treatments: DEFAULT_TREATMENT_LIST
-      };
-      migrateTreatmentNames(loadedState);
       loadedState.settingsRevision = SETTINGS_REVISION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedState));
     }
@@ -154,8 +153,39 @@ function saveState() {
 
 function migrateTreatmentNames(targetState) {
   const normalizeTreatment = value => String(value || "").toLowerCase().includes("vaser") ? "Vaser Liposuction" : "Mini Surgery";
-  targetState.crm = targetState.crm.map(row => ({ ...row, interest: normalizeTreatment(row.interest) }));
-  targetState.medis = targetState.medis.map(row => ({ ...row, treatmentName: normalizeTreatment(row.treatmentName) }));
+  targetState.crm = (targetState.crm || []).map(row => ({ ...row, interest: normalizeTreatment(row.interest) }));
+  targetState.medis = (targetState.medis || []).map(row => ({ ...row, treatmentName: normalizeTreatment(row.treatmentName) }));
+}
+
+function normalizeDashboardState(targetState) {
+  targetState.settings = {
+    ...defaultState().settings,
+    ...(targetState.settings || {}),
+    pics: DEFAULT_PIC_LIST,
+    treatments: DEFAULT_TREATMENT_LIST,
+    sources: DEFAULT_SOURCE_LIST
+  };
+  migrateTreatmentNames(targetState);
+  migrateCampaignNames(targetState);
+  migrateMedicalRows(targetState);
+}
+
+function migrateCampaignNames(targetState) {
+  targetState.marketing = (targetState.marketing || []).map(row => ({
+    ...row,
+    name: CAMPAIGN_RENAMES[row.name] || row.name
+  }));
+}
+
+function migrateMedicalRows(targetState) {
+  targetState.medis = (targetState.medis || []).map(row => {
+    const { therapist, ...rest } = row;
+    return {
+      ...rest,
+      nurseBeautician: row.nurseBeautician || therapist || "",
+      mediaLinks: row.mediaLinks || ""
+    };
+  });
 }
 
 function bindGlobalEvents() {
@@ -500,7 +530,7 @@ function addContent(data) {
 }
 
 function renderMedis() {
-  const rows = searchRows(state.medis, ["patientId", "bookingId", "treatmentName", "doctor", "status"]);
+  const rows = searchRows(state.medis, ["patientId", "bookingId", "treatmentName", "doctor", "nurseBeautician", "status"]);
   const k = getMedisKpis();
   document.getElementById("medisPage").innerHTML = `
     ${sectionHead("Tim Medis", "Laporan treatment, jadwal sederhana, aftercare, dan rekomendasi rebooking.")}
@@ -512,8 +542,8 @@ function renderMedis() {
       ${kpi("Komplain/Keluhan", k.complaints)}
     </div>
     ${medisForm()}
-    ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => x.status !== "Done"), ["date","patientId","bookingId","treatmentName","doctor","therapist","room","status"])}
-    ${tableCard("Treatment Report", "medis", rows, ["date","patientId","bookingId","treatmentName","doctor","therapist","room","status","products","aftercare","upsales","rebooking","complaint","bottleneck","ownerNote"])}
+    ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => x.status !== "Done"), ["date","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status"])}
+    ${tableCard("Treatment Report", "medis", rows, ["date","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("medisForm", addMedis);
 }
@@ -525,7 +555,7 @@ function medisForm() {
     input("bookingId", "Booking ID"),
     select("treatmentName", "Treatment", splitSetting("treatments")),
     input("doctor", "Dokter"),
-    input("therapist", "Terapis"),
+    input("nurseBeautician", "Suster/Beautician"),
     input("room", "Ruangan"),
     select("status", "Status Treatment", ["Done", "Pending", "No Show"]),
     input("products", "Produk/Alat Terpakai"),
@@ -533,16 +563,64 @@ function medisForm() {
     input("upsales", "Up Sales", "number"),
     input("rebooking", "Rekomendasi Rebooking"),
     input("complaint", "Keluhan Pasien"),
+    fileInput("mediaFiles", "Upload Foto Before-After & Video Treatment", "image/*,video/*", true),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
   ]);
 }
 
-function addMedis(data) {
+async function addMedis(data, fileFields = {}) {
   data.upsales = num(data.upsales);
+  const mediaFiles = fileFields.mediaFiles || [];
+  data.mediaLinks = "";
+  if (mediaFiles.length) {
+    toast("Mengupload media treatment ke Google Drive...");
+    const uploadedFiles = await uploadTreatmentMedia(mediaFiles, data);
+    data.mediaLinks = uploadedFiles.map(file => file.url).filter(Boolean).join("\n");
+  }
   state.medis.unshift({ ...data, ownerNote: "" });
   saveState();
   renderAll();
-  toast("Laporan medis berhasil ditambahkan.");
+  toast(mediaFiles.length ? "Laporan medis dan media Drive berhasil ditambahkan." : "Laporan medis berhasil ditambahkan.");
+}
+
+async function uploadTreatmentMedia(files, meta) {
+  const backend = getBackendConfig();
+  if (!backend.url) throw new Error("Isi Google Apps Script Web App URL di Settings untuk upload media.");
+  const payloadFiles = await Promise.all(files.map(fileToPayload));
+  const response = await fetch(backend.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "uploadTreatmentMedia",
+      token: backend.token,
+      meta: {
+        date: meta.date,
+        patientId: meta.patientId,
+        bookingId: meta.bookingId,
+        treatmentName: meta.treatmentName
+      },
+      files: payloadFiles
+    })
+  });
+  const result = await response.json();
+  if (!result.ok) throw new Error(result.error || "Upload media gagal.");
+  return result.files || [];
+}
+
+function fileToPayload(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      resolve({
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        data: dataUrl.includes(",") ? dataUrl.split(",").pop() : dataUrl
+      });
+    };
+    reader.onerror = () => reject(new Error(`Gagal membaca file ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderInventory() {
@@ -724,6 +802,7 @@ function tableCell(dataset, row, col) {
     if (canOwnerNote()) return `<td><input class="owner-note-input" data-note-dataset="${dataset}" data-index="${row.__index}" value="${escapeHtml(value)}" placeholder="Catatan Owner"></td>`;
     return `<td>${escapeHtml(value)}</td>`;
   }
+  if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
   if (["revenue","spend","cpc","cpl","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
   if (["ctr"].includes(col)) return `<td>${pct(num(value))}</td>`;
@@ -734,14 +813,38 @@ function tableCell(dataset, row, col) {
 function bindForm(id, handler) {
   const form = document.getElementById(id);
   if (!form) return;
-  form.addEventListener("submit", event => {
+  form.addEventListener("submit", async event => {
     event.preventDefault();
     if (form.querySelector("fieldset").disabled) return;
-    handler(Object.fromEntries(new FormData(form).entries()));
+    const submitButton = form.querySelector(".primary-button");
+    if (submitButton) submitButton.disabled = true;
+    try {
+      await handler(formValues(form), formFiles(form), form);
+    } catch (error) {
+      toast(error.message || "Form gagal diproses.");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
   });
   bindExports();
   bindDeletes();
   bindOwnerNotes();
+}
+
+function formValues(form) {
+  const data = {};
+  new FormData(form).forEach((value, key) => {
+    if (!(value instanceof File)) data[key] = value;
+  });
+  return data;
+}
+
+function formFiles(form) {
+  return [...form.querySelectorAll('input[type="file"]')].reduce((fields, inputEl) => {
+    const files = [...(inputEl.files || [])].filter(file => file.size);
+    if (files.length) fields[inputEl.name] = files;
+    return fields;
+  }, {});
 }
 
 function bindExports() {
@@ -791,7 +894,7 @@ function renderCharts() {
   if (activePage === "owner") {
     makeChart("funnelChart", "bar", ["Lead", "Qualified", "Booking", "Show Up", "Treatment", "Rebooking", "Referral"], [getKpis().totalLeads, getKpis().qualified, getKpis().booking, getKpis().showUp, getKpis().treatment, 16, 9]);
     makeChart("revenueChart", "line", state.crm.map(x => x.date), state.crm.map(x => x.revenue), true);
-    makeChart("sourceChart", "doughnut", splitSetting("sources"), [34, 27, 18, 11, 8]);
+    makeChart("sourceChart", "doughnut", splitSetting("sources"), [30, 24, 18, 14, 10, 8, 6, 4]);
   }
   if (activePage === "marketing") {
     makeChart("spendRevenueChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => x.spend), false, state.marketing.map(x => x.revenue));
@@ -808,7 +911,7 @@ function makeChart(id, type, labels, values, fill = false, secondValues = null) 
     label: id.includes("revenue") ? "Revenue" : "Data",
     data: values,
     borderColor: "#F81894",
-    backgroundColor: ["#F81894", "#ff77bd", "#d7a72f", "#8fd3ff", "#75d99d", "#ffc857", "#2f2930"],
+    backgroundColor: ["#F81894", "#ff77bd", "#d7a72f", "#8fd3ff", "#75d99d", "#ffc857", "#2f2930", "#8f7cf6"],
     tension: .38,
     fill
   }];
@@ -827,6 +930,9 @@ function chartCard(title, id) {
 }
 function input(name, text, type = "text", value = "") {
   return `<label>${text}<input name="${name}" type="${type}" value="${escapeHtml(value)}" ${type === "date" ? "" : ""}></label>`;
+}
+function fileInput(name, text, accept = "", multiple = false) {
+  return `<label>${text}<input name="${name}" type="file" accept="${escapeHtml(accept)}" ${multiple ? "multiple" : ""}></label>`;
 }
 function textarea(name, text, value = "") {
   return `<label>${text}<textarea name="${name}">${escapeHtml(value)}</textarea></label>`;
@@ -945,6 +1051,8 @@ async function fetchFromGoogleSheets() {
       ...result.data,
       session: state.session
     };
+    normalizeDashboardState(state);
+    state.settingsRevision = SETTINGS_REVISION;
     saveState();
     renderAll();
     toast("Data berhasil diambil dari Google Sheets.");
@@ -984,8 +1092,13 @@ function pct(value) { return `${(num(value) * 100).toFixed(1)}%`; }
 function money(value) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num(value)); }
 function nextId(prefix, number) { return `${prefix}-${number}`; }
 function label(key) {
-  const labels = { date: "Tanggal", id: "ID", name: "Nama", wa: "WhatsApp", interest: "Treatment Interest", followUp: "Follow Up", bottleneck: "Evaluasi/Bottleneck", ownerNote: "Catatan Owner", spend: "Spend", impressions: "Impression", clicks: "Click", qualified: "Qualified", finalStock: "Stok Akhir", stockStatus: "Status Stok", inQty: "Stock In", outQty: "Stock Out", treatmentName: "Treatment", patientId: "Patient ID", bookingId: "Booking ID", publishDate: "Publish Date" };
+  const labels = { date: "Tanggal", id: "ID", name: "Nama", wa: "WhatsApp", interest: "Treatment Interest", followUp: "Follow Up", bottleneck: "Evaluasi/Bottleneck", ownerNote: "Catatan Owner", spend: "Spend", impressions: "Impression", clicks: "Click", qualified: "Qualified", finalStock: "Stok Akhir", stockStatus: "Status Stok", inQty: "Stock In", outQty: "Stock Out", treatmentName: "Treatment", patientId: "Patient ID", bookingId: "Booking ID", publishDate: "Publish Date", nurseBeautician: "Suster/Beautician", mediaLinks: "Media Before-After & Video" };
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, x => x.toUpperCase());
+}
+function mediaLinks(value) {
+  const links = String(value || "").split(/\n|,\s*/).map(x => x.trim()).filter(Boolean);
+  if (!links.length) return "-";
+  return links.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Media ${index + 1}</a>`).join("<br>");
 }
 function badgeClass(value) { return String(value).toLowerCase().replace(/\s+/g, "-"); }
 function sectionLabel(section) {
