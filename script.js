@@ -5,7 +5,7 @@
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-24-source-campaign-medical-media-update";
+const SETTINGS_REVISION = "2026-06-24-owner-settings-locked";
 const DEFAULT_PIC_LIST = "Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
@@ -96,9 +96,7 @@ function defaultState() {
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
       sources: DEFAULT_SOURCE_LIST,
-      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp",
-      backendUrl: "",
-      backendToken: ""
+      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
     },
     crm: [
       lead("2026-06-17", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Qualified", "Hot", "2026-06-24", "Ingin konsultasi body contour", 2500000, "Butuh follow up cepat", ""),
@@ -212,6 +210,8 @@ function normalizeDashboardState(targetState) {
     treatments: DEFAULT_TREATMENT_LIST,
     sources: DEFAULT_SOURCE_LIST
   };
+  delete targetState.settings.backendUrl;
+  delete targetState.settings.backendToken;
   migrateTreatmentNames(targetState);
   migrateCampaignNames(targetState);
   migrateMedicalRows(targetState);
@@ -327,13 +327,18 @@ function handleLogin(event) {
   toast(`Berhasil masuk sebagai ${role}.`);
 }
 
+function visibleNavItems() {
+  return NAV.filter(item => currentRole === "Owner" || !["owner", "settings"].includes(item.id));
+}
+
 function buildNavigation() {
-  const navHtml = NAV.map(item => navButton(item)).join("");
+  const items = visibleNavItems();
+  const navHtml = items.map(item => navButton(item)).join("");
   els.navList.innerHTML = navHtml;
-  els.mobileNav.innerHTML = NAV.filter(item => ["owner", "crm", "marketing", "reports"].includes(item.id)).map(item => navButton(item)).join("");
+  els.mobileNav.innerHTML = items.filter(item => ["crm", "marketing", "reports", "inventory"].includes(item.id)).slice(0, 4).map(item => navButton(item)).join("");
   document.querySelectorAll("[data-nav]").forEach(button => {
     button.addEventListener("click", () => {
-      if (button.classList.contains("disabled")) return toast("Dashboard Owner hanya untuk role Owner.");
+      if (button.classList.contains("disabled")) return toast("Menu ini hanya untuk Owner.");
       activePage = button.dataset.nav;
       els.sidebar.classList.remove("open");
       renderAll();
@@ -342,12 +347,11 @@ function buildNavigation() {
 }
 
 function navButton(item) {
-  const disabled = currentRole !== "Owner" && item.id === "owner";
+  const disabled = currentRole !== "Owner" && ["owner", "settings"].includes(item.id);
   return `<button class="nav-item ${activePage === item.id ? "active" : ""} ${disabled ? "disabled" : ""}" data-nav="${item.id}">
     <span>${item.icon}</span><span>${item.label}</span>
   </button>`;
 }
-
 function canEdit(section) {
   const map = { crm: "CRM", marketing: "Digital Marketing", content: "Design Content", medis: "Medis", inventory: "Inventory" };
   return currentRole === map[section];
@@ -380,14 +384,14 @@ function renderShell() {
 }
 
 function renderActivePage() {
+  if (currentRole !== "Owner" && ["owner", "settings"].includes(activePage)) activePage = "crm";
   document.querySelectorAll(".page-panel").forEach(panel => panel.classList.remove("active"));
-  const page = NAV.find(item => item.id === activePage) || NAV[0];
+  const page = NAV.find(item => item.id === activePage) || NAV.find(item => item.id === "crm");
   document.getElementById(page.page).classList.add("active");
   els.pageTitle.textContent = page.label;
   els.pageEyebrow.textContent = `${currentRole} access`;
   document.querySelectorAll(".nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.nav === activePage));
 }
-
 function renderOwner() {
   const k = getKpis();
   const alerts = getOwnerAlerts();
@@ -739,22 +743,24 @@ function renderReports() {
 }
 
 function renderSettings() {
+  const backend = getBackendConfig();
+  const syncStatus = getSyncStatus();
   document.getElementById("settingsPage").innerHTML = `
-    ${sectionHead("Settings", "Konfigurasi brand, divisi, PIC, treatment, source lead, dan platform.")}
+    ${sectionHead("Settings", "Konfigurasi bisnis khusus Owner. Pengaturan backend dikunci agar koneksi tidak rusak karena salah input.")}
     <div class="settings-card install-guide">
-      <h2>Install Aplikasi</h2>
+      <h2>Status Sistem</h2>
       <div class="three-col">
         <div>
-          <strong>Android</strong>
-          <p>Buka aplikasi via Chrome dari localhost atau HTTPS, lalu tap tombol install atau menu Add to Home screen.</p>
+          <strong>Backend</strong>
+          <p>${backend.url && backend.token ? "Connected to Google Workspace" : "Belum terhubung"}</p>
         </div>
         <div>
-          <strong>iPhone</strong>
-          <p>Buka via Safari, tap Share, lalu pilih Add to Home Screen.</p>
+          <strong>Sinkronisasi</strong>
+          <p>${syncStatus.pending ? "Ada perubahan menunggu sync" : "Tidak ada antrian sync"}</p>
         </div>
         <div>
-          <strong>Offline</strong>
-          <p>Setelah dibuka via localhost/HTTPS, data demo dan shell aplikasi tersedia offline melalui service worker.</p>
+          <strong>Install</strong>
+          <p>Android: Chrome Add to Home Screen. iPhone: Safari Share lalu Add to Home Screen.</p>
         </div>
       </div>
     </div>
@@ -767,12 +773,9 @@ function renderSettings() {
         ${textarea("treatments", "Treatment list", state.settings.treatments)}
         ${textarea("sources", "Source lead list", state.settings.sources)}
         ${textarea("platforms", "Platform list", state.settings.platforms)}
-        ${input("backendUrl", "Google Apps Script Web App URL", "url", state.settings.backendUrl || "")}
-        ${input("backendToken", "Google Apps Script Token", "password", state.settings.backendToken || "")}
       </div>
       <div class="form-actions">
         <button class="primary-button">Simpan Settings</button>
-        <button class="ghost-button" type="button" id="resetDemo">Reset Dummy Data</button>
         <button class="ghost-button" type="button" id="syncSheets">Sync Google Sheets</button>
         <button class="ghost-button" type="button" id="fetchSheets">Ambil Data Sheets</button>
       </div>
@@ -780,22 +783,23 @@ function renderSettings() {
   `;
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
-    state.settings = Object.fromEntries(new FormData(event.currentTarget).entries());
+    state.settings = {
+      ...state.settings,
+      ...Object.fromEntries(new FormData(event.currentTarget).entries())
+    };
     saveState();
     renderAll();
     toast("Settings berhasil disimpan.");
   });
-  document.getElementById("resetDemo").addEventListener("click", () => {
-    state = defaultState();
-    currentRole = state.session.role;
-    saveState();
-    renderAll();
-    toast("Dummy data berhasil direset.");
+  document.getElementById("syncSheets").addEventListener("click", () => {
+    if (!confirm("Sync akan menulis data dashboard saat ini ke Google Sheets. Lanjutkan?")) return;
+    syncToGoogleSheets();
   });
-  document.getElementById("syncSheets").addEventListener("click", syncToGoogleSheets);
-  document.getElementById("fetchSheets").addEventListener("click", fetchFromGoogleSheets);
+  document.getElementById("fetchSheets").addEventListener("click", () => {
+    if (!confirm("Ambil Data Sheets akan mengganti data lokal browser dengan data dari Google Sheets. Lanjutkan?")) return;
+    fetchFromGoogleSheets();
+  });
 }
-
 function formCard(id, title, section, fields) {
   const disabled = canEdit(section) ? "" : "disabled";
   const note = canEdit(section) ? "Role ini bisa input data." : `Mode lihat. Input hanya untuk role ${sectionLabel(section)}.`;
@@ -905,6 +909,7 @@ function bindDeletes() {
       const dataset = button.dataset.delete;
       const index = Number(button.dataset.index);
       if (!canDelete(dataset)) return toast("Role ini tidak punya akses hapus data tersebut.");
+      if (!confirm("Yakin ingin menghapus data ini? Perubahan akan ikut tersinkron ke backend.")) return;
       if (state[dataset]) state[dataset].splice(index, 1);
       saveState();
       renderAll();
@@ -912,7 +917,6 @@ function bindDeletes() {
     });
   });
 }
-
 function bindOwnerNotes() {
   document.querySelectorAll("[data-note-dataset]").forEach(inputEl => {
     if (inputEl.dataset.noteBound === "true") return;
@@ -1288,7 +1292,7 @@ async function syncToGoogleSheets(options = {}) {
           content: state.content,
           medis: state.medis,
           inventory: state.inventory,
-          settings: state.settings
+          settings: settingsForSync()
         }
       })
     });
@@ -1326,6 +1330,8 @@ async function fetchFromGoogleSheets() {
       session: state.session
     };
     normalizeDashboardState(state);
+    delete state.settings.backendUrl;
+    delete state.settings.backendToken;
     state.settingsRevision = SETTINGS_REVISION;
     autoSyncPaused = true;
     saveState();
@@ -1343,9 +1349,14 @@ async function fetchFromGoogleSheets() {
 
 function getBackendConfig() {
   return {
-    url: state.settings.backendUrl || CONFIG.GOOGLE_APPS_SCRIPT_URL,
-    token: state.settings.backendToken || CONFIG.GOOGLE_APPS_SCRIPT_TOKEN
+    url: CONFIG.GOOGLE_APPS_SCRIPT_URL,
+    token: CONFIG.GOOGLE_APPS_SCRIPT_TOKEN
   };
+}
+
+function settingsForSync() {
+  const { backendUrl, backendToken, ...safeSettings } = state.settings || {};
+  return safeSettings;
 }
 
 function searchRows(rows, keys) {
@@ -1394,6 +1405,10 @@ function toast(message) {
 function applyBrandSettings() {
   document.documentElement.style.setProperty("--pink", state.settings.primaryColor || "#F81894");
 }
+
+
+
+
 
 
 
