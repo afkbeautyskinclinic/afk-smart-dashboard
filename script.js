@@ -37,6 +37,20 @@ let activePage = currentRole === "Owner" ? "owner" : "crm";
 let charts = {};
 let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
+const chartDepthPlugin = {
+  id: "chartDepthPlugin",
+  beforeDatasetDraw(chart) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.shadowColor = "rgba(55, 22, 43, .22)";
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetX = 8;
+    ctx.shadowOffsetY = 10;
+  },
+  afterDatasetDraw(chart) {
+    chart.ctx.restore();
+  }
+};
 
 const els = {
   navList: document.getElementById("navList"),
@@ -906,19 +920,70 @@ function renderCharts() {
 }
 
 function makeChart(id, type, labels, values, fill = false, secondValues = null) {
-  const ctx = document.getElementById(id);
-  if (!ctx || typeof Chart === "undefined") return;
+  const canvas = document.getElementById(id);
+  if (!canvas || typeof Chart === "undefined") return;
   if (charts[id]) charts[id].destroy();
+  const pinkGradient = chartGradient(canvas, "rgba(248, 24, 148, .92)", "rgba(248, 24, 148, .2)");
+  const goldGradient = chartGradient(canvas, "rgba(215, 167, 47, .86)", "rgba(215, 167, 47, .22)");
+  const palette = ["#F81894", "#ff77bd", "#d7a72f", "#8fd3ff", "#75d99d", "#ffc857", "#2f2930", "#8f7cf6"];
   const datasets = [{
     label: id.includes("revenue") ? "Revenue" : "Data",
     data: values,
-    borderColor: "#F81894",
-    backgroundColor: ["#F81894", "#ff77bd", "#d7a72f", "#8fd3ff", "#75d99d", "#ffc857", "#2f2930", "#8f7cf6"],
+    borderColor: type === "doughnut" ? "#fff" : "#F81894",
+    backgroundColor: type === "line" ? pinkGradient : palette,
+    borderWidth: type === "line" ? 3 : 2,
+    borderRadius: type === "bar" ? 10 : 0,
+    borderSkipped: false,
+    hoverOffset: type === "doughnut" ? 14 : 6,
+    pointBackgroundColor: "#fff",
+    pointBorderColor: "#F81894",
+    pointBorderWidth: 3,
+    pointRadius: type === "line" ? 4 : 0,
     tension: .38,
     fill
   }];
-  if (secondValues) datasets.push({ label: "Revenue", data: secondValues, backgroundColor: "#d7a72f", borderColor: "#d7a72f" });
-  charts[id] = new Chart(ctx, { type, data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } } });
+  if (secondValues) datasets.push({
+    label: "Revenue",
+    data: secondValues,
+    backgroundColor: goldGradient,
+    borderColor: "#d7a72f",
+    borderWidth: 2,
+    borderRadius: 10,
+    borderSkipped: false
+  });
+  charts[id] = new Chart(canvas, {
+    type,
+    data: { labels, datasets },
+    plugins: [chartDepthPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: type === "doughnut" ? "48%" : undefined,
+      layout: { padding: 10 },
+      plugins: {
+        legend: { display: true, labels: { usePointStyle: true, boxWidth: 8, padding: 14 } },
+        tooltip: {
+          backgroundColor: "rgba(33, 21, 34, .94)",
+          borderColor: "rgba(255,255,255,.18)",
+          borderWidth: 1,
+          displayColors: true,
+          padding: 12
+        }
+      },
+      scales: type === "doughnut" ? undefined : {
+        x: { grid: { color: "rgba(118,106,120,.12)" } },
+        y: { grid: { color: "rgba(118,106,120,.14)" } }
+      }
+    }
+  });
+}
+
+function chartGradient(canvas, topColor, bottomColor) {
+  const context = canvas.getContext("2d");
+  const gradient = context.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
+  gradient.addColorStop(0, topColor);
+  gradient.addColorStop(1, bottomColor);
+  return gradient;
 }
 
 function sectionHead(title, subtitle, actions = "") {
