@@ -9,6 +9,7 @@ const SETTINGS_REVISION = "2026-06-24-owner-settings-locked";
 const DEFAULT_PIC_LIST = "Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
+const DEFAULT_PRIMARY_COLOR = "#e81887";
 const CAMPAIGN_RENAMES = {
   "Glow Booster June": "Skin Barrier Expert"
 };
@@ -91,7 +92,7 @@ function defaultState() {
     session: { role: "Owner", authenticated: false },
     settings: {
       brandName: "AFK Beauty Clinic Smart Dashboard",
-      primaryColor: "#F81894",
+      primaryColor: DEFAULT_PRIMARY_COLOR,
       divisions: "CRM, Digital Marketing, Design Content, Medis, Inventory",
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
@@ -206,6 +207,7 @@ function normalizeDashboardState(targetState) {
   targetState.settings = {
     ...defaultState().settings,
     ...(targetState.settings || {}),
+    primaryColor: !targetState.settings?.primaryColor || targetState.settings.primaryColor.toLowerCase() === "#f81894" ? DEFAULT_PRIMARY_COLOR : targetState.settings.primaryColor,
     pics: DEFAULT_PIC_LIST,
     treatments: DEFAULT_TREATMENT_LIST,
     sources: DEFAULT_SOURCE_LIST
@@ -970,7 +972,7 @@ function makeChart(id, type, labels, values, fill = false, secondValues = null) 
     borderWidth: type === "line" ? 3 : 2,
     borderRadius: type === "bar" ? 10 : 0,
     borderSkipped: false,
-    hoverOffset: type === "doughnut" ? 14 : 6,
+    hoverOffset: 0,
     pointBackgroundColor: "#fff",
     pointBorderColor: "#F81894",
     pointBorderWidth: 3,
@@ -990,12 +992,21 @@ function makeChart(id, type, labels, values, fill = false, secondValues = null) 
   charts[id] = new Chart(canvas, {
     type,
     data: { labels, datasets },
-    plugins: [chartDepthPlugin],
+    plugins: [],
     options: {
       responsive: true,
+      animation: false,
+      resizeDelay: 120,
       maintainAspectRatio: false,
       cutout: type === "doughnut" ? "48%" : undefined,
       layout: { padding: 10 },
+      hover: { mode: null },
+      transitions: {
+        active: { animation: { duration: 0 } },
+        resize: { animation: { duration: 0 } },
+        show: { animation: { duration: 0 } },
+        hide: { animation: { duration: 0 } }
+      },
       plugins: {
         legend: { display: true, labels: { usePointStyle: true, boxWidth: 8, padding: 14 } },
         tooltip: {
@@ -1403,7 +1414,7 @@ function toast(message) {
   toast.timer = setTimeout(() => els.toast.classList.remove("show"), 2600);
 }
 function applyBrandSettings() {
-  document.documentElement.style.setProperty("--pink", state.settings.primaryColor || "#F81894");
+  document.documentElement.style.setProperty("--pink", state.settings.primaryColor || DEFAULT_PRIMARY_COLOR);
 }
 
 
