@@ -8,8 +8,8 @@ Jangan simpan password email atau API key di file frontend. Semua konfigurasi se
 
 ## File Backend
 
-- `Code.gs`: Web App API, setup spreadsheet, sync data, fetch data, audit log.
-- `appsscript.json`: manifest Apps Script dengan timezone dan scope yang diperlukan.
+- `Code.gs`: Web App API, setup spreadsheet, sync/fetch data, upload media treatment ke Google Drive, audit log.
+- `appsscript.json`: manifest Apps Script dengan timezone dan scope Sheets/Drive yang diperlukan.
 
 ## Setup Google Apps Script
 
@@ -20,6 +20,7 @@ Jangan simpan password email atau API key di file frontend. Semua konfigurasi se
 5. Salin isi `Code.gs` ke file `Code.gs`.
 6. Salin isi `appsscript.json` ke file `appsscript.json`.
 7. Klik Save.
+8. Saat pertama kali menjalankan/deploy versi ini, approve izin Google Drive. Backend akan otomatis membuat folder `AFK Beauty Clinic Smart Dashboard - Treatment Media` untuk foto before-after dan video treatment.
 
 ## Buat Database Google Sheets
 
@@ -103,6 +104,7 @@ POST WEB_APP_URL
 
 - Gunakan akun Google Workspace khusus, bukan akun pribadi staf.
 - Batasi akses file Google Sheets hanya untuk Owner/admin.
+- Batasi akses folder media treatment di Google Drive sesuai SOP privasi pasien.
 - Buat backup berkala Google Sheets.
 - Jangan pakai data pasien lengkap sebelum ada SOP privasi, consent, dan kontrol akses.
 - Untuk data pasien nyata, pertimbangkan backend autentikasi penuh dan audit akses per user.

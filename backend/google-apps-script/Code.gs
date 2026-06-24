@@ -2,12 +2,13 @@
 const DEPLOYMENT_OWNER_EMAIL = 'aefkaskincare@gmail.com';
 const SHEET_ID_PROPERTY = 'AFK_DASHBOARD_SHEET_ID';
 const TOKEN_PROPERTY = 'AFK_DASHBOARD_TOKEN';
+const MEDIA_FOLDER_ID_PROPERTY = 'AFK_TREATMENT_MEDIA_FOLDER_ID';
 
 const TABLES = {
   crm: ['date', 'id', 'name', 'gender', 'address', 'wa', 'interest', 'status', 'category', 'followUp', 'note', 'revenue', 'bottleneck', 'ownerNote', 'updatedAt'],
   marketing: ['date', 'platform', 'name', 'objective', 'spend', 'impressions', 'clicks', 'leads', 'qualified', 'booking', 'showUp', 'treatment', 'revenue', 'bottleneck', 'ownerNote', 'updatedAt'],
   content: ['date', 'id', 'title', 'platform', 'format', 'hook', 'cta', 'asset', 'publishDate', 'views', 'reach', 'likes', 'comments', 'shares', 'saves', 'leads', 'status', 'ownerNote', 'updatedAt'],
-  medis: ['date', 'patientId', 'bookingId', 'treatmentName', 'doctor', 'therapist', 'room', 'status', 'products', 'aftercare', 'upsales', 'rebooking', 'complaint', 'bottleneck', 'ownerNote', 'updatedAt'],
+  medis: ['date', 'patientId', 'bookingId', 'treatmentName', 'doctor', 'nurseBeautician', 'room', 'status', 'products', 'aftercare', 'upsales', 'rebooking', 'complaint', 'mediaLinks', 'bottleneck', 'ownerNote', 'updatedAt'],
   inventory: ['id', 'name', 'category', 'unit', 'supplier', 'initial', 'inQty', 'outQty', 'minimum', 'expired', 'bottleneck', 'ownerNote', 'updatedAt'],
   settings: ['key', 'value', 'updatedAt'],
   auditLog: ['timestamp', 'email', 'action', 'tableName', 'details']
@@ -56,6 +57,12 @@ function doPost(e) {
       return json_({ ok: true, message: 'Row berhasil ditambahkan.', timestamp: now_() });
     }
 
+    if (body.action === 'uploadTreatmentMedia') {
+      const uploadedFiles = uploadTreatmentMedia_(body.files || [], body.meta || {});
+      logAudit_('uploadTreatmentMedia', 'medis', JSON.stringify({ meta: body.meta || {}, count: uploadedFiles.length }));
+      return json_({ ok: true, files: uploadedFiles, timestamp: now_() });
+    }
+
     return json_({ ok: false, error: 'Action tidak dikenal.' });
   } catch (error) {
     return json_({ ok: false, error: error.message });
@@ -84,6 +91,10 @@ function setDashboardToken(token) {
   }
   PropertiesService.getScriptProperties().setProperty(TOKEN_PROPERTY, String(token));
   return 'Token backend berhasil disimpan.';
+}
+
+function authorizeDriveAccess() {
+  return getTreatmentMediaFolder_().getUrl();
 }
 
 function createDashboardToken() {
@@ -129,10 +140,13 @@ function replaceTable_(ss, tableName, rows) {
 
   if (!rows.length) return;
 
-  const values = rows.map(row => headers.map(header => {
-    if (header === 'updatedAt') return now_();
-    return row[header] == null ? '' : row[header];
-  }));
+  const values = rows.map(sourceRow => {
+    const row = normalizeRowForTable_(tableName, sourceRow);
+    return headers.map(header => {
+      if (header === 'updatedAt') return now_();
+      return row[header] == null ? '' : row[header];
+    });
+  });
   sheet.getRange(2, 1, values.length, headers.length).setValues(values);
   sheet.autoResizeColumns(1, headers.length);
 }
@@ -142,7 +156,18 @@ function appendRow_(tableName, row) {
   const ss = getSpreadsheet_();
   const headers = TABLES[tableName];
   const sheet = ensureSheet_(ss, tableName, headers);
+  row = normalizeRowForTable_(tableName, row);
   sheet.appendRow(headers.map(header => header === 'updatedAt' ? now_() : (row[header] == null ? '' : row[header])));
+}
+
+function normalizeRowForTable_(tableName, row) {
+  if (tableName !== 'medis') return row || {};
+  row = row || {};
+  return {
+    ...row,
+    nurseBeautician: row.nurseBeautician || row.therapist || '',
+    mediaLinks: row.mediaLinks || ''
+  };
 }
 
 function readTable_(ss, tableName) {
@@ -186,9 +211,66 @@ function seedSettings_() {
     divisions: 'CRM, Digital Marketing, Design Content, Medis, Inventory',
     pics: 'Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory',
     treatments: 'Vaser Liposuction, Mini Surgery',
-    sources: 'Instagram Ads, TikTok Ads, Database, Referral, Walk In',
+    sources: 'Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral',
     platforms: 'Instagram, TikTok, Meta Ads, Google Ads, WhatsApp'
   });
+}
+
+function uploadTreatmentMedia_(files, meta) {
+  if (!files.length) throw new Error('Tidak ada file media yang dikirim.');
+  const rootFolder = getTreatmentMediaFolder_();
+  const recordFolder = getOrCreateChildFolder_(rootFolder, treatmentMediaFolderName_(meta));
+
+  return files.map(file => {
+    if (!file.data) throw new Error('Data file kosong: ' + (file.name || 'media'));
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(file.data),
+      file.mimeType || 'application/octet-stream',
+      sanitizeDriveName_(file.name || 'media-treatment')
+    );
+    const driveFile = recordFolder.createFile(blob);
+    return {
+      name: driveFile.getName(),
+      url: driveFile.getUrl(),
+      id: driveFile.getId(),
+      mimeType: driveFile.getMimeType()
+    };
+  });
+}
+
+function getTreatmentMediaFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const existingId = props.getProperty(MEDIA_FOLDER_ID_PROPERTY);
+  if (existingId) {
+    try {
+      return DriveApp.getFolderById(existingId);
+    } catch (error) {
+      props.deleteProperty(MEDIA_FOLDER_ID_PROPERTY);
+    }
+  }
+
+  const folder = DriveApp.createFolder(APP_NAME + ' - Treatment Media');
+  props.setProperty(MEDIA_FOLDER_ID_PROPERTY, folder.getId());
+  return folder;
+}
+
+function getOrCreateChildFolder_(parentFolder, name) {
+  const folders = parentFolder.getFoldersByName(name);
+  return folders.hasNext() ? folders.next() : parentFolder.createFolder(name);
+}
+
+function treatmentMediaFolderName_(meta) {
+  const parts = [
+    meta.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+    meta.bookingId || '',
+    meta.patientId || '',
+    meta.treatmentName || ''
+  ].filter(Boolean);
+  return sanitizeDriveName_(parts.join(' - ') || 'Treatment Media');
+}
+
+function sanitizeDriveName_(value) {
+  return String(value || 'media').replace(/[\\/:*?"<>|#%{}~&]/g, '-').slice(0, 140);
 }
 
 function getSpreadsheet_() {

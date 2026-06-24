@@ -14,7 +14,7 @@
 
 ## medis
 
-`date, patientId, bookingId, treatmentName, doctor, therapist, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, ownerNote, updatedAt`
+`date, patientId, bookingId, treatmentName, doctor, nurseBeautician, room, status, products, aftercare, upsales, rebooking, complaint, mediaLinks, bottleneck, ownerNote, updatedAt`
 
 ## inventory
 
