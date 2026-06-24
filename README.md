@@ -79,8 +79,8 @@ Untuk mengulang data awal, buka Settings lalu klik `Reset Dummy Data`.
 
 ## 5. Cara export CSV dan PDF
 
-- CSV: klik tombol `Export CSV` pada tabel atau halaman Reports.
-- PDF: buka halaman Reports, klik `Export PDF / Print`, lalu pilih `Save as PDF` dari dialog print browser.
+- CSV: klik tombol `Export CSV` pada Dashboard Owner, tabel dashboard, atau halaman Reports.
+- PDF: klik tombol `Export PDF` di samping `Export CSV`, lalu pilih `Save as PDF` dari dialog print browser.
 
 ## 6. Cara mengembangkan ke Google Sheets / Apps Script
 
@@ -127,18 +127,32 @@ Gunakan akun Google Workspace `aefkaskincare@gmail.com` untuk membuat dan deploy
 
 File penting:
 
-- `backend/google-apps-script/Code.gs`: API Web App, setup Google Sheets, sync/fetch data, token, audit log.
+- `backend/google-apps-script/Code.gs`: API Web App, setup Google Sheets, sync/fetch data, upload media treatment ke Google Drive, token, audit log.
 - `backend/google-apps-script/appsscript.json`: manifest Apps Script.
 - `backend/google-apps-script/DEPLOYMENT.md`: panduan deployment step-by-step.
 - `backend/google-apps-script/SHEETS_SCHEMA.md`: struktur tabel Google Sheets.
+- `GITHUB_DEPLOYMENT.md`: panduan publish ke GitHub Pages agar aplikasi bisa diinstall dari Android/iPhone.
+- `.github/workflows/pages.yml`: workflow otomatis untuk deploy GitHub Pages.
 
-Setelah deploy Web App, isi konfigurasi di `script.js`:
+Setelah deploy Web App, buka aplikasi sebagai Owner, masuk ke Settings, lalu isi:
 
-```js
-const CONFIG = {
-  GOOGLE_APPS_SCRIPT_URL: "URL_WEB_APP_GOOGLE_APPS_SCRIPT",
-  GOOGLE_APPS_SCRIPT_TOKEN: "TOKEN_DARI_createDashboardToken"
-};
-```
+- `Google Apps Script Web App URL`
+- `Google Apps Script Token`
 
-Lalu gunakan tombol `Sync Google Sheets` dan `Ambil Data Sheets` di halaman Settings.
+Lalu gunakan tombol `Sync Google Sheets` dan `Ambil Data Sheets` di halaman Settings. Untuk upload foto before-after dan video treatment, deploy Apps Script terbaru dan approve izin Google Drive yang diminta.
+
+## Publish ke GitHub Pages
+
+Aplikasi sudah dilengkapi workflow GitHub Pages di `.github/workflows/pages.yml`.
+
+Ringkasnya:
+
+1. Buat repository GitHub baru.
+2. Upload semua file dashboard ini ke branch `main`.
+3. Buka `Settings > Pages`.
+4. Pilih deployment source `GitHub Actions`.
+5. Tunggu workflow selesai.
+6. Buka URL GitHub Pages.
+7. Install dari Android Chrome atau iPhone Safari.
+
+Panduan lengkap ada di `GITHUB_DEPLOYMENT.md`.
