@@ -343,15 +343,9 @@ function renderActivePage() {
 
 function renderOwner() {
   const k = getKpis();
-  const alerts = [
-    ["Lead belum difollow up", state.crm.filter(x => new Date(x.followUp) <= new Date() && !["Treatment", "Lost"].includes(x.status)).length],
-    ["Booking no show", Math.max(0, k.booking - k.showUp)],
-    ["Stok menipis", state.inventory.filter(x => stockStatus(x) !== "Aman").length],
-    ["Konten belum publish", state.content.filter(x => x.status !== "Posted").length],
-    ["Laporan divisi belum masuk", 1]
-  ];
+  const alerts = getOwnerAlerts();
   document.getElementById("ownerPage").innerHTML = `
-    ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.")}
+    ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
       ${kpi("Total Leads", k.totalLeads)}
       ${kpi("Qualified Leads", k.qualified)}
@@ -666,7 +660,7 @@ function addInventory(data) {
 
 function renderReports() {
   document.getElementById("reportsPage").innerHTML = `
-    ${sectionHead("Reports", "Rekap harian, mingguan, bulanan, export CSV, print/PDF, dan filter divisi.")}
+    ${sectionHead("Reports", "Rekap harian, mingguan, bulanan, export CSV, PDF, dan filter divisi.")}
     <div class="table-card">
       <div class="filter-row">
         <input type="date" id="reportStart">
@@ -679,8 +673,8 @@ function renderReports() {
           <option value="medis">Medis</option>
           <option value="inventory">Inventory</option>
         </select>
-        <button class="primary-button" data-export="all">Export CSV</button>
-        <button class="ghost-button" id="printReport">Export PDF / Print</button>
+        <button class="primary-button" type="button" data-export="all">Export CSV</button>
+        <button class="ghost-button" type="button" data-export-pdf="all">Export PDF</button>
       </div>
       <div class="three-col">
         ${kpi("Rekap Harian", money(getKpis().revenue / 7))}
@@ -695,10 +689,6 @@ function renderReports() {
   bindExports();
   bindDeletes();
   bindOwnerNotes();
-  document.getElementById("printReport").addEventListener("click", () => {
-    toast("Membuka dialog print. Pilih Save as PDF untuk export PDF.");
-    window.print();
-  });
 }
 
 function renderSettings() {
@@ -776,7 +766,7 @@ function tableCard(title, dataset, rows, columns) {
   return `<div class="table-card">
     <div class="section-head">
       <div><h2>${title}</h2><p>${dataRows.length} data tampil</p></div>
-      <button class="ghost-button" data-export="${dataset}">Export CSV</button>
+      ${exportActions(dataset)}
     </div>
     ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col)}</th>`).join("")}<th>Aksi</th></tr></thead><tbody>
       ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}<td><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></td></tr>`).join("")}
@@ -851,6 +841,9 @@ function bindExports() {
   document.querySelectorAll("[data-export]").forEach(button => {
     button.addEventListener("click", () => exportCsv(button.dataset.export));
   });
+  document.querySelectorAll("[data-export-pdf]").forEach(button => {
+    button.addEventListener("click", () => exportPdf(button.dataset.exportPdf));
+  });
 }
 
 function bindDeletes() {
@@ -919,8 +912,14 @@ function makeChart(id, type, labels, values, fill = false, secondValues = null) 
   charts[id] = new Chart(ctx, { type, data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } } });
 }
 
-function sectionHead(title, subtitle) {
-  return `<div class="section-head"><div><h2>${title}</h2><p>${subtitle}</p></div></div>`;
+function sectionHead(title, subtitle, actions = "") {
+  return `<div class="section-head"><div><h2>${title}</h2><p>${subtitle}</p></div>${actions}</div>`;
+}
+function exportActions(dataset) {
+  return `<div class="export-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button class="ghost-button" type="button" data-export="${dataset}">Export CSV</button>
+    <button class="ghost-button" type="button" data-export-pdf="${dataset}">Export PDF</button>
+  </div>`;
 }
 function kpi(title, value) {
   return `<article class="kpi-card"><span>${title}</span><strong>${value}</strong><small>Near realtime</small></article>`;
@@ -981,14 +980,13 @@ function kanban() {
 }
 
 function exportCsv(dataset) {
-  const keys = dataset === "all" ? ["crm", "marketing", "content", "medis", "inventory"] : [dataset];
-  const csv = keys.map(key => {
-    const rows = (state[key] || []).map(normalizeRow);
-    if (!rows.length) return "";
-    const headers = Object.keys(rows[0]).filter(x => x !== "__index");
-    const lines = rows.map(row => headers.map(h => `"${String(row[h] ?? "").replaceAll('"', '""')}"`).join(","));
-    return [`# ${key}`, headers.join(","), ...lines].join("\n");
+  const csv = getExportSections(dataset).map(section => {
+    if (!section.rows.length) return "";
+    const headers = section.headers.length ? section.headers : Object.keys(section.rows[0]).filter(x => x !== "__index");
+    const lines = section.rows.map(row => headers.map(key => csvCell(formatExportValue(key, row[key]))).join(","));
+    return [`# ${section.title}`, headers.map(label).join(","), ...lines].join("\n");
   }).filter(Boolean).join("\n\n");
+  if (!csv) return toast("Belum ada data untuk diexport.");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -996,6 +994,153 @@ function exportCsv(dataset) {
   link.click();
   URL.revokeObjectURL(link.href);
   toast("CSV berhasil diexport.");
+}
+
+function exportPdf(dataset) {
+  const sections = getExportSections(dataset).filter(section => section.rows.length);
+  if (!sections.length) return toast("Belum ada data untuk diexport.");
+
+  const title = `AFK Beauty - ${exportTitle(dataset)}`;
+  const printedAt = new Date().toLocaleString("id-ID");
+  const sectionHtml = sections.map(section => exportSectionHtml(section)).join("");
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  document.body.appendChild(frame);
+
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(`<!doctype html>
+    <html lang="id">
+    <head>
+      <meta charset="utf-8">
+      <title>${escapeHtml(title)}</title>
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body { color: #1f1424; font-family: Arial, sans-serif; margin: 0; }
+        header { border-bottom: 2px solid #f81894; margin-bottom: 18px; padding-bottom: 10px; }
+        h1 { font-size: 22px; margin: 0 0 4px; }
+        h2 { color: #f81894; font-size: 15px; margin: 18px 0 8px; }
+        p { color: #6d6072; font-size: 11px; margin: 0; }
+        table { border-collapse: collapse; margin-bottom: 12px; table-layout: fixed; width: 100%; }
+        th, td { border: 1px solid #ead4df; font-size: 9px; padding: 6px; text-align: left; vertical-align: top; word-break: break-word; }
+        th { background: #fff0f7; color: #2f2434; }
+        tr:nth-child(even) td { background: #fffafd; }
+      </style>
+    </head>
+    <body>
+      <header>
+        <h1>${escapeHtml(title)}</h1>
+        <p>Dicetak ${escapeHtml(printedAt)}</p>
+      </header>
+      ${sectionHtml}
+    </body>
+    </html>`);
+  doc.close();
+
+  setTimeout(() => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => frame.remove(), 1200);
+  }, 250);
+  toast("Membuka dialog print. Pilih Save as PDF untuk export PDF.");
+}
+
+function getExportSections(dataset) {
+  if (dataset === "owner") return getOwnerExportSections();
+  const keys = dataset === "all" ? ["crm", "marketing", "content", "medis", "inventory"] : [dataset];
+  return keys.map(key => {
+    const rows = (state[key] || []).map(normalizeRow);
+    const headers = rows.length ? Object.keys(rows[0]).filter(x => x !== "__index") : [];
+    return { title: exportTitle(key), headers, rows };
+  });
+}
+
+function getOwnerAlerts() {
+  const k = getKpis();
+  return [
+    ["Lead belum difollow up", state.crm.filter(x => new Date(x.followUp) <= new Date() && !["Treatment", "Lost"].includes(x.status)).length],
+    ["Booking no show", Math.max(0, k.booking - k.showUp)],
+    ["Stok menipis", state.inventory.filter(x => stockStatus(x) !== "Aman").length],
+    ["Konten belum publish", state.content.filter(x => x.status !== "Posted").length],
+    ["Laporan divisi belum masuk", 1]
+  ];
+}
+
+function getOwnerExportSections() {
+  const k = getKpis();
+  return [
+    {
+      title: "Executive Overview",
+      headers: ["metric", "value"],
+      rows: [
+        { metric: "Total Leads", value: k.totalLeads },
+        { metric: "Qualified Leads", value: k.qualified },
+        { metric: "Total Booking", value: k.booking },
+        { metric: "Show Up", value: k.showUp },
+        { metric: "Total Treatment", value: k.treatment },
+        { metric: "Revenue", value: money(k.revenue) },
+        { metric: "Ad Spend", value: money(k.adSpend) },
+        { metric: "ROAS", value: `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` },
+        { metric: "CPL", value: money(safeDiv(k.adSpend, k.totalLeads)) },
+        { metric: "Stock Critical", value: state.inventory.filter(x => stockStatus(x) !== "Aman").length },
+        { metric: "Top Campaign", value: topBy(state.marketing, "revenue", "name") },
+        { metric: "Top Treatment", value: topText(state.medis, "treatmentName") }
+      ]
+    },
+    {
+      title: "Tabel Alert",
+      headers: ["alert", "total"],
+      rows: getOwnerAlerts().map(([alert, total]) => ({ alert, total }))
+    },
+    {
+      title: "Leads Berdasarkan Source",
+      headers: ["source"],
+      rows: splitSetting("sources").map(source => ({ source }))
+    }
+  ];
+}
+
+function exportSectionHtml(section) {
+  const headers = section.headers.length ? section.headers : Object.keys(section.rows[0] || {}).filter(x => x !== "__index");
+  return `<section>
+    <h2>${escapeHtml(section.title)}</h2>
+    <table>
+      <thead><tr>${headers.map(key => `<th>${escapeHtml(label(key))}</th>`).join("")}</tr></thead>
+      <tbody>${section.rows.map(row => `<tr>${headers.map(key => `<td>${escapeHtml(formatExportValue(key, row[key]))}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table>
+  </section>`;
+}
+
+function exportTitle(dataset) {
+  return {
+    owner: "Executive Overview",
+    crm: "CRM Dashboard",
+    marketing: "Marketing & Ads",
+    content: "Content Creator",
+    medis: "Tim Medis",
+    inventory: "Inventory",
+    all: "Reports"
+  }[dataset] || sectionLabel(dataset);
+}
+
+function formatExportValue(key, value) {
+  if (value === undefined || value === null) return "";
+  if (["revenue", "spend", "cpc", "cpl", "upsales"].includes(key)) return money(num(value));
+  if (key === "ctr") return pct(num(value));
+  if (key === "roas") return `${num(value).toFixed(1)}x`;
+  if (key === "mediaLinks") return String(value).split(/\n|,\s*/).map(x => x.trim()).filter(Boolean).join(" | ");
+  return value;
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
 async function syncToGoogleSheets() {
