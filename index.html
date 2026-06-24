@@ -1,108 +1,111 @@
-<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AFK Beauty Clinic Smart Dashboard</title>
-  <meta name="theme-color" content="#F81894">
-  <meta name="description" content="Dashboard klinik kecantikan AFK Beauty Clinic untuk CRM, Marketing, Content, Medis, Inventory, dan Owner.">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="AFK Dashboard">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="assets/logo-afk.png">
-  <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="Navigasi utama">
-      <div class="brand">
-        <img src="assets/logo-afk.png" alt="AFK Beauty Skin Clinic">
-        <div>
-          <strong>AFK Beauty</strong>
-          <span>Smart Dashboard</span>
-        </div>
-      </div>
-      <nav class="nav-list" id="navList"></nav>
-      <div class="sync-panel">
-        <span class="sync-dot"></span>
-        <div>
-          <strong>Local demo mode</strong>
-          <small>Ready for Google Sheets</small>
-        </div>
-      </div>
-    </aside>
+﻿# Backend Google Workspace AFK Dashboard
 
-    <main class="main">
-      <header class="topbar">
-        <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu">&#9776;</button>
-        <div class="title-block">
-          <span id="pageEyebrow">Realtime clinic cockpit</span>
-          <h1 id="pageTitle">Dashboard Owner</h1>
-        </div>
-        <label class="search-box" aria-label="Cari data">
-          <span>⌕</span>
-          <input id="globalSearch" type="search" placeholder="Cari pasien, campaign, konten...">
-        </label>
-        <button class="icon-button" id="notifyButton" aria-label="Notifikasi">&#128276;</button>
-        <button class="icon-button install-button" id="installApp" aria-label="Install aplikasi" title="Install aplikasi">&#8681;</button>
-        <div class="role-box">
-          <span>Role</span>
-          <select id="roleSelect" aria-label="Pilih role">
-            <option>Owner</option>
-            <option>CRM</option>
-            <option>Digital Marketing</option>
-            <option>Design Content</option>
-            <option>Medis</option>
-            <option>Inventory</option>
-          </select>
-        </div>
-      </header>
+Backend ini disiapkan untuk akun Google Workspace:
 
-      <section class="hero-band">
-        <div>
-          <p>AFK Beauty Clinic Smart Dashboard</p>
-          <h2>Ringkas, premium, dan siap dipakai lintas divisi.</h2>
-        </div>
-        <div class="hero-metrics">
-          <span><strong id="heroRevenue">Rp0</strong> revenue</span>
-          <span><strong id="heroRoas">0x</strong> ROAS</span>
-          <span><strong id="heroLeads">0</strong> leads</span>
-        </div>
-      </section>
+`aefkaskincare@gmail.com`
 
-      <section class="content-grid">
-        <section class="page-panel active" id="ownerPage"></section>
-        <section class="page-panel" id="crmPage"></section>
-        <section class="page-panel" id="marketingPage"></section>
-        <section class="page-panel" id="contentPage"></section>
-        <section class="page-panel" id="medisPage"></section>
-        <section class="page-panel" id="inventoryPage"></section>
-        <section class="page-panel" id="reportsPage"></section>
-        <section class="page-panel" id="settingsPage"></section>
-      </section>
-    </main>
-  </div>
+Jangan simpan password email atau API key di file frontend. Semua konfigurasi sensitif disimpan di Script Properties Google Apps Script.
 
-  <div class="mobile-nav" id="mobileNav" aria-label="Navigasi mobile"></div>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+## File Backend
 
-  <dialog class="login-modal" id="loginModal">
-    <form method="dialog" id="loginForm">
-      <img src="assets/logo-afk.png" alt="">
-      <h2>Masuk sebagai <span id="loginRoleName">Owner</span></h2>
-      <p>Gunakan password demo role untuk membuka akses dashboard.</p>
-      <input id="passwordInput" type="password" placeholder="Password role" autocomplete="current-password" required>
-      <div class="modal-actions">
-        <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
-        <button class="primary-button" value="default">Masuk</button>
-      </div>
-      <small>Demo password: owner123, crm123, marketing123, design123, medis123, inventory123</small>
-    </form>
-  </dialog>
+- `Code.gs`: Web App API, setup spreadsheet, sync/fetch data, upload media treatment ke Google Drive, audit log.
+- `appsscript.json`: manifest Apps Script dengan timezone dan scope Sheets/Drive yang diperlukan.
 
-  <script src="script.js"></script>
-</body>
-</html>
+## Setup Google Apps Script
+
+1. Login ke Google dengan email `aefkaskincare@gmail.com`.
+2. Buka [script.google.com](https://script.google.com).
+3. Buat project baru bernama `AFK Beauty Clinic Smart Dashboard Backend`.
+4. Buka Project Settings, aktifkan `Show appsscript.json manifest file in editor`.
+5. Salin isi `Code.gs` ke file `Code.gs`.
+6. Salin isi `appsscript.json` ke file `appsscript.json`.
+7. Klik Save.
+8. Saat pertama kali menjalankan/deploy versi ini, approve izin Google Drive. Backend akan otomatis membuat folder `AFK Beauty Clinic Smart Dashboard - Treatment Media` untuk foto before-after dan video treatment.
+
+## Buat Database Google Sheets
+
+1. Di editor Apps Script, pilih fungsi `bootstrap`.
+2. Klik Run.
+3. Berikan izin akses saat diminta.
+4. Setelah sukses, jalankan fungsi `getSpreadsheetUrl` untuk melihat URL database Google Sheets.
+
+Sheet yang dibuat:
+
+- `crm`
+- `marketing`
+- `content`
+- `medis`
+- `inventory`
+- `settings`
+- `auditLog`
+
+## Token Keamanan Sederhana
+
+1. Di Apps Script, pilih fungsi `createDashboardToken`.
+2. Klik Run.
+3. Buka `Executions` atau `View > Logs`, lalu copy token yang muncul.
+4. Simpan token itu di sisi frontend pada `CONFIG.GOOGLE_APPS_SCRIPT_TOKEN`.
+
+Alternatif: jika ingin menentukan token sendiri, gunakan Script Properties atau fungsi `setDashboardToken(token)`.
+
+Token ini bukan pengganti autentikasi medis/enterprise, tetapi cukup untuk mencegah endpoint terbuka tanpa sengaja.
+
+## Deploy Web App
+
+1. Klik `Deploy > New deployment`.
+2. Pilih type `Web app`.
+3. Description: `AFK Dashboard API`.
+4. Execute as: `Me (aefkaskincare@gmail.com)`.
+5. Who has access: `Anyone`.
+6. Klik Deploy.
+7. Copy Web App URL.
+8. Tempel URL itu ke frontend:
+
+```js
+const CONFIG = {
+  GOOGLE_APPS_SCRIPT_URL: "WEB_APP_URL_DI_SINI",
+  GOOGLE_APPS_SCRIPT_TOKEN: "TOKEN_DI_SINI"
+};
+```
+
+## Endpoint
+
+Health check:
+
+```text
+GET WEB_APP_URL?action=health&token=TOKEN
+```
+
+Fetch semua data:
+
+```text
+GET WEB_APP_URL?action=fetch&token=TOKEN
+```
+
+Sync semua data:
+
+```json
+POST WEB_APP_URL
+{
+  "action": "sync",
+  "token": "TOKEN",
+  "data": {
+    "crm": [],
+    "marketing": [],
+    "content": [],
+    "medis": [],
+    "inventory": [],
+    "settings": {}
+  }
+}
+```
+
+## Rekomendasi Produksi
+
+- Gunakan akun Google Workspace khusus, bukan akun pribadi staf.
+- Batasi akses file Google Sheets hanya untuk Owner/admin.
+- Batasi akses folder media treatment di Google Drive sesuai SOP privasi pasien.
+- Buat backup berkala Google Sheets.
+- Jangan pakai data pasien lengkap sebelum ada SOP privasi, consent, dan kontrol akses.
+- Untuk data pasien nyata, pertimbangkan backend autentikasi penuh dan audit akses per user.
+
