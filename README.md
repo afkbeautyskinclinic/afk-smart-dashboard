@@ -63,7 +63,7 @@ Catatan: PWA install membutuhkan `localhost` atau HTTPS. Jika aplikasi dibuka la
 ## 3. Struktur file
 
 - `index.html`: struktur aplikasi, topbar, sidebar, panel halaman, modal login.
-- `style.css`: desain premium responsive, warna brand, card UI, tabel, form, mobile navigation.
+- `style.css`: desain premium responsive dengan efek 3D untuk tombol, gambar, tabel, card, grafik, form, dan mobile navigation.
 - `script.js`: dummy data, LocalStorage, role access, kalkulasi KPI, render tabel, Chart.js, export, placeholder Google Sheets.
 - `assets/logo-afk.png`: logo dan favicon aplikasi.
 - `README.md`: dokumentasi penggunaan dan pengembangan.
