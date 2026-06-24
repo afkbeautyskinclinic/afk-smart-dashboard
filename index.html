@@ -131,6 +131,13 @@ fieldset:disabled { opacity: .72; }
   background: transparent;
   color: var(--ink);
 }
+.search-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ink);
+  opacity: .72;
+  flex: 0 0 auto;
+}
 .hero-band {
   display: flex;
   justify-content: space-between;
@@ -566,7 +573,9 @@ tbody tr:hover {
           <h1 id="pageTitle">Dashboard Owner</h1>
         </div>
         <label class="search-box" aria-label="Cari data">
-          <span>âŒ•</span>
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M10.8 18.1a7.3 7.3 0 1 1 0-14.6 7.3 7.3 0 0 1 0 14.6Zm0-1.8a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Zm5.3.8 1.2-1.2 4 4-1.2 1.2-4-4Z" fill="currentColor"/>
+          </svg>
           <input id="globalSearch" type="search" placeholder="Cari pasien, campaign, konten...">
         </label>
         <button class="icon-button" id="notifyButton" aria-label="Notifikasi">&#128276;</button>
