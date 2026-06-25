@@ -679,6 +679,7 @@ let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
 let autoSyncTimer = null;
 let autoSyncPaused = false;
+const OWNER_MANAGED_DATASETS = new Set(["crm", "marketing", "content", "medis", "inventory"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -1454,13 +1455,14 @@ function formCard(id, title, section, fields) {
 
 function tableCard(title, dataset, rows, columns) {
   const dataRows = rows.map(row => normalizeRow(row));
+  const showActions = canManageDataset(dataset);
   return `<div class="table-card">
     <div class="section-head">
       <div><h2>${title}</h2><p>${dataRows.length} data tampil</p></div>
       ${exportActions(dataset)}
     </div>
-    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col)}</th>`).join("")}<th>Aksi</th></tr></thead><tbody>
-      ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}<td><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></td></tr>`).join("")}
+    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
+      ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state">Belum ada data untuk filter ini.</div>`}
   </div>`;
 }
@@ -1574,12 +1576,11 @@ function bindOwnerNotes() {
 }
 
 function canDelete(dataset) {
-  if (currentRole === "Owner") return true;
-  return (dataset === "crm" && currentRole === "CRM") ||
-    (dataset === "marketing" && currentRole === "Digital Marketing") ||
-    (dataset === "content" && currentRole === "Design Content") ||
-    (dataset === "medis" && currentRole === "Medis") ||
-    (dataset === "inventory" && currentRole === "Inventory");
+  return canManageDataset(dataset);
+}
+
+function canManageDataset(dataset) {
+  return currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset);
 }
 
 function renderCharts() {
