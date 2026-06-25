@@ -1,4 +1,4 @@
-const CACHE_NAME = "afk-dashboard-v1.5.9";
+const CACHE_NAME = "afk-dashboard-v1.5.10";
 const APP_SHELL = [
   "./",
   "./index.html",
