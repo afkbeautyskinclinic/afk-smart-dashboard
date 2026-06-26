@@ -621,7 +621,7 @@ tbody tr:hover {
             <option>Manager</option>
             <option>CRM</option>
             <option>Digital Marketing</option>
-            <option>Design Content</option>
+            <option>Creative Performance</option>
             <option>Dokter</option>
             <option>Medis</option>
             <option>Inventory</option>
@@ -696,6 +696,7 @@ const PASSWORDS = {
   Manager: "manager123",
   CRM: "crm123",
   "Digital Marketing": "marketing123",
+  "Creative Performance": "design123",
   "Design Content": "design123",
   Dokter: "dokter123",
   Medis: "medis123",
@@ -716,8 +717,9 @@ const NAV = [
 ];
 
 let state = loadState();
-let currentRole = state.session.role || "Owner";
+let currentRole = normalizeRoleName(state.session.role || "Owner");
 let activePage = currentRole === "Owner" ? "owner" : "crm";
+let reportFilters = { start: "", end: "", division: "all" };
 let charts = {};
 let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
@@ -1045,7 +1047,7 @@ function openLogin(role) {
 
 function handleLogin(event) {
   event.preventDefault();
-  const role = els.loginRoleName.textContent;
+  const role = normalizeRoleName(els.loginRoleName.textContent);
   if (els.passwordInput.value !== PASSWORDS[role]) {
     toast("Password role tidak sesuai.");
     return;
@@ -1087,12 +1089,16 @@ function navButton(item) {
   </button>`;
 }
 function canEdit(section) {
-  const map = { manager: "Manager", marketing: "Digital Marketing", content: "Design Content", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
+  const map = { manager: "Manager", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
   return currentRole === map[section];
 }
 
 function rolePage(role) {
-  return { Manager: "manager", "Digital Marketing": "marketing", "Design Content": "content", CRM: "crm", Dokter: "doctor", Medis: "medis", Inventory: "inventory" }[role] || "crm";
+  return { Manager: "manager", "Digital Marketing": "marketing", "Creative Performance": "content", "Design Content": "content", CRM: "crm", Dokter: "doctor", Medis: "medis", Inventory: "inventory" }[role] || "crm";
+}
+
+function normalizeRoleName(role) {
+  return role === "Design Content" ? "Creative Performance" : role;
 }
 
 function canOwnerNote() {
@@ -1565,24 +1571,25 @@ async function addInventory(data, fileFields = {}) {
 }
 
 function renderReports() {
+  const reportRows = getFilteredReportRows();
   document.getElementById("reportsPage").innerHTML = `
     ${sectionHead("Reports", "Rekap harian, mingguan, bulanan, export CSV, PDF, dan filter divisi.")}
     <div class="table-card">
       <div class="filter-row">
-        <input type="date" id="reportStart">
-        <input type="date" id="reportEnd">
+        <input type="date" id="reportStart" value="${escapeHtml(reportFilters.start)}">
+        <input type="date" id="reportEnd" value="${escapeHtml(reportFilters.end)}">
         <select id="reportDivision">
-          <option value="all">Semua Divisi</option>
-          <option value="manager">Manager</option>
-          <option value="marketing">Marketing</option>
-          <option value="content">Content</option>
-          <option value="crm">CRM</option>
-          <option value="doctor">Dokter</option>
-          <option value="medis">Medis</option>
-          <option value="inventory">Inventory</option>
+          ${reportDivisionOption("all", "Semua Divisi")}
+          ${reportDivisionOption("manager", "Manager")}
+          ${reportDivisionOption("marketing", "Marketing")}
+          ${reportDivisionOption("content", "Creative Performance")}
+          ${reportDivisionOption("crm", "CRM")}
+          ${reportDivisionOption("doctor", "Dokter")}
+          ${reportDivisionOption("medis", "Medis")}
+          ${reportDivisionOption("inventory", "Inventory")}
         </select>
-        <button class="primary-button" type="button" data-export="all">Export CSV</button>
-        <button class="ghost-button" type="button" data-export-pdf="all">Export PDF</button>
+        <button class="primary-button" type="button" data-export="${reportFilters.division}">Export CSV</button>
+        <button class="ghost-button" type="button" data-export-pdf="${reportFilters.division}">Export PDF</button>
       </div>
       <div class="three-col">
         ${kpi("Rekap Harian", compactMoney(getKpis().revenue / 7))}
@@ -1590,17 +1597,57 @@ function renderReports() {
         ${kpi("Rekap Bulanan", compactMoney(getKpis().revenue * 4.1))}
       </div>
     </div>
-    ${tableCard("Manager Summary", "manager", state.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
-    ${tableCard("Marketing Summary", "marketing", state.marketing, ["date","userName","platform","name","spend","leads","revenue","roas"])}
-    ${tableCard("Creative Performance Summary", "content", state.content, ["date","userName","id","title","platform","status","leads"])}
-    ${tableCard("CRM Summary", "crm", state.crm, ["date","userName","id","name","status","category","interest","revenue"])}
-    ${tableCard("Dokter Summary", "doctor", state.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
-    ${tableCard("Inventory Summary", "inventory", state.inventory, ["date","userName","id","name","finalStock","minimum","stockStatus","expired"])}
+    ${reportSummaryCard("Manager Summary", "manager", reportRows.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
+    ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","platform","name","spend","leads","revenue","roas"])}
+    ${reportSummaryCard("Creative Performance Summary", "content", reportRows.content, ["date","userName","id","title","platform","status","leads"])}
+    ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","id","name","status","category","interest","revenue"])}
+    ${reportSummaryCard("Dokter Summary", "doctor", reportRows.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
+    ${reportSummaryCard("Tim Medis Summary", "medis", reportRows.medis, ["date","userName","patientId","bookingId","treatmentName","status"])}
+    ${reportSummaryCard("Inventory Summary", "inventory", reportRows.inventory, ["date","userName","id","name","finalStock","minimum","stockStatus","expired"])}
   `;
+  bindReportFilters();
   bindExports();
   bindDeletes();
   bindEdits();
   bindOwnerNotes();
+}
+
+function reportDivisionOption(value, text) {
+  return `<option value="${value}" ${reportFilters.division === value ? "selected" : ""}>${text}</option>`;
+}
+
+function reportSummaryCard(title, dataset, rows, columns) {
+  if (reportFilters.division !== "all" && reportFilters.division !== dataset) return "";
+  return tableCard(title, dataset, rows, columns);
+}
+
+function getFilteredReportRows() {
+  return ["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"].reduce((acc, dataset) => {
+    acc[dataset] = filterRowsByDate(state[dataset] || []);
+    return acc;
+  }, {});
+}
+
+function filterRowsByDate(rows) {
+  return rows.filter(row => {
+    const dateValue = row.date || row.publishDate || row.expired || "";
+    if (!dateValue) return true;
+    if (reportFilters.start && dateValue < reportFilters.start) return false;
+    if (reportFilters.end && dateValue > reportFilters.end) return false;
+    return true;
+  });
+}
+
+function bindReportFilters() {
+  const start = document.getElementById("reportStart");
+  const end = document.getElementById("reportEnd");
+  const division = document.getElementById("reportDivision");
+  [start, end, division].forEach(control => {
+    control.addEventListener("change", () => {
+      reportFilters = { start: start.value, end: end.value, division: division.value };
+      renderReports();
+    });
+  });
 }
 
 function renderSettings() {
@@ -1676,15 +1723,20 @@ function formCard(id, title, section, fields) {
 function tableCard(title, dataset, rows, columns) {
   const dataRows = rows.map(row => normalizeRow(row));
   const showActions = canManageDataset(dataset);
+  const exportDataset = tableExportDataset(dataset);
   return `<div class="table-card">
     <div class="section-head">
       <div><h2>${title}</h2><p>${dataRows.length} data tampil</p></div>
-      ${exportActions(dataset)}
+      ${exportActions(exportDataset)}
     </div>
     ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col, dataset)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
       ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><div class="action-buttons"><button class="ghost-button" data-edit="${dataset}" data-index="${row.__index}">Edit</button><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></div></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state">Belum ada data untuk filter ini.</div>`}
   </div>`;
+}
+
+function tableExportDataset(dataset) {
+  return { medisSchedule: "medis", inventoryAlerts: "inventory" }[dataset] || dataset;
 }
 
 function normalizeRow(row) {
@@ -2151,7 +2203,8 @@ function getExportSections(dataset) {
   if (dataset === "owner") return getOwnerExportSections();
   const keys = dataset === "all" ? ["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"] : [dataset];
   return keys.map(key => {
-    const rows = (state[key] || []).map(normalizeRow);
+    const sourceRows = activePage === "reports" ? filterRowsByDate(state[key] || []) : (state[key] || []);
+    const rows = sourceRows.map(normalizeRow);
     const headers = rows.length ? Object.keys(rows[0]).filter(x => x !== "__index") : [];
     return { title: exportTitle(key), dataset: key, headers, rows };
   });
@@ -2330,8 +2383,15 @@ function settingsForSync() {
 }
 
 function searchRows(rows, keys) {
-  const query = els.globalSearch.value.trim().toLowerCase();
-  return rows.map((row, index) => ({ ...row, __index: index })).filter(row => !query || keys.some(key => String(row[key] || "").toLowerCase().includes(query)));
+  const query = normalizeSearchText(els.globalSearch.value);
+  return rows.map((row, index) => ({ ...row, __index: index })).filter(row => {
+    if (!query) return true;
+    const searchableKeys = [...new Set([...(keys || []), ...Object.keys(row)])].filter(key => key !== "__index");
+    return searchableKeys.some(key => normalizeSearchText(row[key]).includes(query));
+  });
+}
+function normalizeSearchText(value) {
+  return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 function finalStock(row) { return num(row.initial) + num(row.inQty) - num(row.outQty); }
 function stockStatus(row) { const final = finalStock(row); return final <= 0 ? "Habis" : final <= num(row.minimum) ? "Menipis" : "Aman"; }
