@@ -681,7 +681,7 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-27-division-name-labels";
+const SETTINGS_REVISION = "2026-06-27-medis-patient-status-labels";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -823,10 +823,10 @@ function defaultState() {
       doctorReport("2026-06-21", "dr. Arya", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "Reno", "Cannula set dan korset", "Analgesik oral", "Pending", "", "Korset 6 minggu", "Kontrol 7 hari", "Menunggu hasil lab", "")
     ],
     medis: [
-      treatment("2026-06-17", "Nur Hikmah Medis", "PT-301", "BK-701", "Vaser Liposuction", "dr. Keisha", "Mila", "Ruang 2", "Done", "Cannula set", "Gunakan korset sesuai arahan", 700000, "4 minggu", "", "Antrian padat", ""),
-      treatment("2026-06-18", "Nur Hikmah Medis", "PT-302", "BK-702", "Mini Surgery", "dr. Nabila", "Tari", "Ruang Tindakan", "Done", "Minor surgery kit", "Kontrol luka sesuai jadwal", 300000, "2 minggu", "Kemerahan ringan", "Edukasi aftercare perlu diperjelas", ""),
-      treatment("2026-06-19", "Nur Hikmah Medis", "PT-303", "BK-703", "Mini Surgery", "dr. Keisha", "Mila", "Ruang 1", "Done", "Minor surgery kit", "Jaga area tindakan tetap kering", 150000, "1 bulan", "", "Produk masker menipis", ""),
-      treatment("2026-06-21", "Nur Hikmah Medis", "PT-304", "BK-704", "Vaser Liposuction", "dr. Arya", "Reno", "Ruang Tindakan", "Pending", "Cannula set", "Korset 6 minggu", 2500000, "Kontrol 7 hari", "", "Menunggu hasil lab", "")
+      treatment("2026-06-17", "Nur Hikmah Medis", "Nadia Putri", "BK-701", "Vaser Liposuction", "dr. Keisha", "Mila", "Ruang 2", "Selesai", "Cannula set", "Gunakan korset sesuai arahan", 700000, "4 minggu", "", "Antrian padat", ""),
+      treatment("2026-06-18", "Nur Hikmah Medis", "Maya Kirana", "BK-702", "Mini Surgery", "dr. Nabila", "Tari", "Ruang Tindakan", "Selesai", "Minor surgery kit", "Kontrol luka sesuai jadwal", 300000, "2 minggu", "Kemerahan ringan", "Edukasi aftercare perlu diperjelas", ""),
+      treatment("2026-06-19", "Nur Hikmah Medis", "Aulia Rahma", "BK-703", "Mini Surgery", "dr. Keisha", "Mila", "Ruang 1", "Selesai", "Minor surgery kit", "Jaga area tindakan tetap kering", 150000, "1 bulan", "", "Produk masker menipis", ""),
+      treatment("2026-06-21", "Nur Hikmah Medis", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "dr. Arya", "Reno", "Ruang Tindakan", "Ditunda", "Cannula set", "Korset 6 minggu", 2500000, "Kontrol 7 hari", "", "Menunggu hasil lab", "")
     ],
     inventory: [
       stock("2026-06-17", "Ridho Inventory", "PR-401", "Serum HA Skin Booster", "Injectable", "Vial", "GlowMed", 24, 10, 18, 12, "2027-02-10", "Butuh reorder jika campaign naik", ""),
@@ -1421,13 +1421,13 @@ function renderMedis() {
     ${sectionHead("Tim Medis", "Laporan treatment, jadwal sederhana, aftercare, dan rekomendasi rebooking.")}
     <div class="kpi-grid">
       ${kpi("Total Pasien Datang", k.patients)}
-      ${kpi("Treatment Done", k.done)}
+      ${kpi("Treatment Selesai", k.done)}
       ${kpi("Treatment Populer", k.popular)}
       ${kpi("Rebooking Recommendation", k.rebooking)}
       ${kpi("Komplain/Keluhan", k.complaints)}
     </div>
     ${medisForm()}
-    ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => x.status !== "Done"), ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status"])}
+    ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => !isTreatmentDone(x.status)), ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status"])}
     ${tableCard("Treatment Report", "medis", rows, ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("medisForm", addMedis);
@@ -1437,13 +1437,13 @@ function medisForm() {
   return formCard("medisForm", "Form Input Laporan Treatment", "medis", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama Tim Medis"),
-    input("patientId", "Patient ID"),
+    input("patientId", "Nama Pasien"),
     input("bookingId", "Booking ID"),
     select("treatmentName", "Treatment", splitSetting("treatments")),
     input("doctor", "Dokter"),
     input("nurseBeautician", "Suster/Beautician"),
     input("room", "Ruangan"),
-    select("status", "Status Treatment", ["Done", "Pending", "No Show"]),
+    select("status", "Status Treatment", ["Selesai", "Ditunda", "Batal"]),
     input("products", "Produk/Alat Terpakai"),
     input("aftercare", "Catatan Aftercare"),
     input("upsales", "Up Sales", "number"),
@@ -2012,7 +2012,7 @@ function getKpis() {
   const qualified = state.crm.filter(x => ["Qualified", "Booking", "Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "qualified");
   const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "booking");
   const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "showUp");
-  const treatmentCount = state.crm.filter(x => x.status === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => ["Selesai", "Done"].includes(x.status)).length + state.medis.filter(x => x.status === "Done").length;
+  const treatmentCount = state.crm.filter(x => x.status === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
   const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + sum(state.manager, "dailyRevenue");
   return { totalLeads, qualified, booking, showUp, treatment: treatmentCount, revenue, adSpend: sum(state.marketing, "spend") + sum(state.manager, "adSpend") };
 }
@@ -2039,10 +2039,13 @@ function getContentKpis() {
   return { total: state.content.length, posted, onTime: safeDiv(posted, state.content.length), engagement: sum(state.content, "likes") + sum(state.content, "comments") + sum(state.content, "shares") + sum(state.content, "saves"), leads: sum(state.content, "leads"), top: topBy(state.content, "views", "title") };
 }
 function getMedisKpis() {
-  return { patients: state.medis.length, done: state.medis.filter(x => x.status === "Done").length, popular: topText(state.medis, "treatmentName"), rebooking: state.medis.filter(x => x.rebooking).length, complaints: state.medis.filter(x => x.complaint).length };
+  return { patients: state.medis.length, done: state.medis.filter(x => isTreatmentDone(x.status)).length, popular: topText(state.medis, "treatmentName"), rebooking: state.medis.filter(x => x.rebooking).length, complaints: state.medis.filter(x => x.complaint).length };
 }
 function getDoctorKpis() {
-  return { patients: state.doctor.length, done: state.doctor.filter(x => ["Selesai", "Done"].includes(x.status)).length, pending: state.doctor.filter(x => x.status === "Pending").length, rebooking: state.doctor.filter(x => x.rebooking).length, complaints: state.doctor.filter(x => x.complaint).length };
+  return { patients: state.doctor.length, done: state.doctor.filter(x => isTreatmentDone(x.status)).length, pending: state.doctor.filter(x => ["Pending", "Ditunda"].includes(x.status)).length, rebooking: state.doctor.filter(x => x.rebooking).length, complaints: state.doctor.filter(x => x.complaint).length };
+}
+function isTreatmentDone(status) {
+  return ["Selesai", "Done"].includes(String(status || ""));
 }
 
 function kanban() {
@@ -2393,7 +2396,7 @@ function label(key, dataset = "") {
     inQty: "Stock In",
     outQty: "Stock Out",
     treatmentName: "Treatment",
-    patientId: "Patient ID",
+    patientId: "Nama Pasien",
     bookingId: "Booking ID",
     publishDate: "Publish Date",
     nurseBeautician: "Suster/Beautician",
