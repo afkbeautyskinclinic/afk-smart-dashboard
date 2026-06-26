@@ -725,6 +725,7 @@ let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
 let autoSyncTimer = null;
 let autoSyncPaused = false;
+let searchRenderTimer = null;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const EDITABLE_REPORT_FIELDS = {
@@ -978,7 +979,12 @@ function bindGlobalEvents() {
     els.roleSelect.value = currentRole;
     els.loginModal.close();
   });
-  els.globalSearch.addEventListener("input", renderAll);
+  els.globalSearch.addEventListener("input", () => {
+    clearTimeout(searchRenderTimer);
+    searchRenderTimer = setTimeout(renderAll, 180);
+  });
+  els.globalSearch.addEventListener("search", renderAll);
+  els.globalSearch.addEventListener("change", renderAll);
   els.menuToggle.addEventListener("click", () => els.sidebar.classList.toggle("open"));
   document.getElementById("notifyButton").addEventListener("click", () => toast("5 alert aktif: follow up, no show, stok, konten, laporan."));
 }
