@@ -1,7 +1,7 @@
 {
-  "name": "AFK Beauty Clinic Smart Dashboard",
-  "short_name": "AFK Dashboard",
-  "description": "Dashboard klinik kecantikan untuk Owner, CRM, Marketing, Content, Medis, dan Inventory.",
+  "name": "AFK Growth Intelligence Dashboard",
+  "short_name": "AFK Growth",
+  "description": "Growth intelligence dashboard untuk Owner, CRM, Marketing, Content, Medis, dan Inventory.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
