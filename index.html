@@ -681,10 +681,10 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-26-manager-doctor-dashboard";
+const SETTINGS_REVISION = "2026-06-27-division-name-labels";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
-const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Content Creator, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
+const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
 const DEFAULT_PRIMARY_COLOR = "#e81887";
@@ -706,7 +706,7 @@ const NAV = [
   { id: "owner", label: "Dashboard Owner", icon: "&#9813;", page: "ownerPage" },
   { id: "manager", label: "Dashboard Manager", icon: "&#9874;", page: "managerPage" },
   { id: "marketing", label: "Dashboard Marketing Digital & Ads", icon: "&#9678;", page: "marketingPage" },
-  { id: "content", label: "Dashboard Content Creator", icon: "&#9998;", page: "contentPage" },
+  { id: "content", label: "Dashboard Creative Performance", icon: "&#9998;", page: "contentPage" },
   { id: "crm", label: "Dashboard CRM", icon: "&#9742;", page: "crmPage" },
   { id: "doctor", label: "Dashboard Dokter", icon: "&#9877;", page: "doctorPage" },
   { id: "medis", label: "Dashboard Tim Medis", icon: "&#10010;", page: "medisPage" },
@@ -726,11 +726,11 @@ let autoSyncPaused = false;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const EDITABLE_REPORT_FIELDS = {
-  manager: ["date","userName","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
+  manager: ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
   marketing: ["date","userName","platform","name","objective","spend","impressions","clicks","leads","qualified","booking","showUp","treatment","revenue","mediaLinks","bottleneck","ownerNote"],
   content: ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"],
   crm: ["date","userName","id","name","gender","address","wa","interest","status","category","followUp","note","revenue","mediaLinks","bottleneck","ownerNote"],
-  doctor: ["date","userName","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"],
+  doctor: ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"],
   medis: ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"],
   inventory: ["date","userName","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","mediaLinks","bottleneck","ownerNote"]
 };
@@ -789,15 +789,15 @@ function defaultState() {
     settings: {
       brandName: DEFAULT_DASHBOARD_NAME,
       primaryColor: DEFAULT_PRIMARY_COLOR,
-      divisions: "Manager, Digital Marketing, Content Creator, CRM, Dokter, Medis, Inventory",
+      divisions: "Manager, Digital Marketing, Creative Performance, CRM, Dokter, Medis, Inventory",
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
       sources: DEFAULT_SOURCE_LIST,
       platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
     },
     manager: [
-      managerReport("2026-06-21", "Ayu Manager", "Ayu Lestari", 6100000, 1250000, "Sunscreen Aftercare", 2750000, 9250000, 13000000, 12000000, 300000000, 268000000, 1500000, ""),
-      managerReport("2026-06-22", "Ayu Manager", "Ayu Lestari", 5800000, 950000, "Serum HA Skin Booster", 3400000, 11100000, 13000000, 14500000, 300000000, 282500000, 2500000, "")
+      managerReport("2026-06-21", "Ayu Lestari", 6100000, 1250000, "Sunscreen Aftercare", 2750000, 9250000, 13000000, 12000000, 300000000, 268000000, 1500000, ""),
+      managerReport("2026-06-22", "Ayu Lestari", 5800000, 950000, "Serum HA Skin Booster", 3400000, 11100000, 13000000, 14500000, 300000000, 282500000, 2500000, "")
     ],
     marketing: [
       campaign("2026-06-17", "Rizki Digital Marketing & Ads", "Meta Ads", "Skin Barrier Expert", "Lead Generation", 1800000, 32000, 980, 85, 42, 20, 12, 21500000, "Creative before-after paling kuat", ""),
@@ -806,10 +806,10 @@ function defaultState() {
       campaign("2026-06-20", "Rizki Digital Marketing & Ads", "Meta Ads", "Facial Promo Weekend", "Traffic", 950000, 26000, 760, 64, 24, 14, 7, 7200000, "Perlu landing chat lebih cepat", "")
     ],
     content: [
-      content("2026-06-15", "Rani Content Creator", "CT-201", "Mitos Acne Laser", "Instagram", "Reels", "Jerawat tidak selalu karena skincare", "Chat admin sekarang", "https://drive.example/acne", "2026-06-18", 21000, 18000, 1200, 84, 95, 211, 18, "Posted"),
-      content("2026-06-16", "Rani Content Creator", "CT-202", "Before After Glow", "TikTok", "Short Video", "Kulit kusam berubah dalam 45 menit", "Booking facial glow", "https://drive.example/glow", "2026-06-20", 39000, 32000, 2300, 160, 201, 410, 34, "Posted"),
-      content("2026-06-19", "Rani Content Creator", "CT-203", "Dokter Jawab Vaser", "Instagram", "Carousel", "Takut liposuction sakit?", "Konsultasi gratis", "https://drive.example/vaser", "2026-06-25", 0, 0, 0, 0, 0, 0, 0, "Approved"),
-      content("2026-06-21", "Rani Content Creator", "CT-204", "Checklist Aftercare", "Instagram", "Story", "Simpan panduan setelah treatment", "Save post ini", "https://drive.example/aftercare", "2026-06-23", 8200, 7100, 360, 44, 25, 188, 7, "Editing")
+      content("2026-06-15", "Rani Creative Performance", "CT-201", "Mitos Acne Laser", "Instagram", "Reels", "Jerawat tidak selalu karena skincare", "Chat admin sekarang", "https://drive.example/acne", "2026-06-18", 21000, 18000, 1200, 84, 95, 211, 18, "Posted"),
+      content("2026-06-16", "Rani Creative Performance", "CT-202", "Before After Glow", "TikTok", "Short Video", "Kulit kusam berubah dalam 45 menit", "Booking facial glow", "https://drive.example/glow", "2026-06-20", 39000, 32000, 2300, 160, 201, 410, 34, "Posted"),
+      content("2026-06-19", "Rani Creative Performance", "CT-203", "Dokter Jawab Vaser", "Instagram", "Carousel", "Takut liposuction sakit?", "Konsultasi gratis", "https://drive.example/vaser", "2026-06-25", 0, 0, 0, 0, 0, 0, 0, "Approved"),
+      content("2026-06-21", "Rani Creative Performance", "CT-204", "Checklist Aftercare", "Instagram", "Story", "Simpan panduan setelah treatment", "Save post ini", "https://drive.example/aftercare", "2026-06-23", 8200, 7100, 360, 44, 25, 188, 7, "Editing")
     ],
     crm: [
       lead("2026-06-17", "Ryan CRM", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Qualified", "Hot", "2026-06-24", "Ingin konsultasi body contour", 2500000, "Butuh follow up cepat", ""),
@@ -819,8 +819,8 @@ function defaultState() {
       lead("2026-06-21", "Ryan CRM", "LD-1005", "SA", "Perempuan", "Bogor", "628121110005", "Mini Surgery", "Show Up", "Warm", "2026-06-26", "Minta dokter perempuan", 950000, "Slot dokter terbatas", "")
     ],
     doctor: [
-      doctorReport("2026-06-18", "dr. Keisha Dokter", "dr. Keisha", "Nadia Putri", "BK-702", "Mini Surgery", "Tari", "Minor surgery kit", "Antibiotik topikal", "Selesai", "Kemerahan ringan", "Kontrol luka sesuai jadwal", "2 minggu", "Edukasi aftercare perlu diperjelas", ""),
-      doctorReport("2026-06-21", "dr. Arya Dokter", "dr. Arya", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "Reno", "Cannula set dan korset", "Analgesik oral", "Pending", "", "Korset 6 minggu", "Kontrol 7 hari", "Menunggu hasil lab", "")
+      doctorReport("2026-06-18", "dr. Keisha", "Nadia Putri", "BK-702", "Mini Surgery", "Tari", "Minor surgery kit", "Antibiotik topikal", "Selesai", "Kemerahan ringan", "Kontrol luka sesuai jadwal", "2 minggu", "Edukasi aftercare perlu diperjelas", ""),
+      doctorReport("2026-06-21", "dr. Arya", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "Reno", "Cannula set dan korset", "Analgesik oral", "Pending", "", "Korset 6 minggu", "Kontrol 7 hari", "Menunggu hasil lab", "")
     ],
     medis: [
       treatment("2026-06-17", "Nur Hikmah Medis", "PT-301", "BK-701", "Vaser Liposuction", "dr. Keisha", "Mila", "Ruang 2", "Done", "Cannula set", "Gunakan korset sesuai arahan", 700000, "4 minggu", "", "Antrian padat", ""),
@@ -837,8 +837,8 @@ function defaultState() {
   };
 }
 
-function managerReport(date, userName, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks = "", ownerNote = "") {
-  return { date, userName, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks, ownerNote };
+function managerReport(date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks = "", ownerNote = "") {
+  return { date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks, ownerNote };
 }
 function lead(date, userName, id, name, gender, address, wa, interest, status, category, followUp, note, revenue, bottleneck, ownerNote, mediaLinks = "") {
   return { date, userName, id, name, gender, address, wa, interest, status, category, followUp, note, revenue, bottleneck, mediaLinks, ownerNote };
@@ -849,8 +849,8 @@ function campaign(date, userName, platform, name, objective, spend, impressions,
 function content(date, userName, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status, mediaLinks = "") {
   return { date, userName, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status, mediaLinks, ownerNote: "" };
 }
-function doctorReport(date, userName, doctorName, patientName, bookingId, treatmentName, nurseAssistant, productsTools, medicineGiven, status, complaint, aftercare, rebooking, bottleneck, mediaLinks = "", ownerNote = "") {
-  return { date, userName, doctorName, patientName, bookingId, treatmentName, nurseAssistant, productsTools, medicineGiven, status, complaint, aftercare, rebooking, bottleneck, mediaLinks, ownerNote };
+function doctorReport(date, doctorName, patientName, bookingId, treatmentName, nurseAssistant, productsTools, medicineGiven, status, complaint, aftercare, rebooking, bottleneck, mediaLinks = "", ownerNote = "") {
+  return { date, doctorName, patientName, bookingId, treatmentName, nurseAssistant, productsTools, medicineGiven, status, complaint, aftercare, rebooking, bottleneck, mediaLinks, ownerNote };
 }
 function treatment(date, userName, patientId, bookingId, treatmentName, doctor, nurseBeautician, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, ownerNote, mediaLinks = "") {
   return { date, userName, patientId, bookingId, treatmentName, doctor, nurseBeautician, room, status, products, aftercare, upsales, rebooking, complaint, bottleneck, mediaLinks, ownerNote };
@@ -954,7 +954,7 @@ function migrateDivisionRows(targetState) {
   const defaults = {
     manager: "Manager",
     marketing: "Digital Marketing",
-    content: "Content Creator",
+    content: "Creative Performance",
     crm: "CRM",
     doctor: "Dokter",
     medis: "Medis",
@@ -963,7 +963,7 @@ function migrateDivisionRows(targetState) {
   Object.entries(defaults).forEach(([dataset, userName]) => {
     targetState[dataset] = (targetState[dataset] || []).map(row => ({
       ...row,
-      userName: row.userName || userName,
+      userName: ["manager", "doctor"].includes(dataset) ? row.userName : row.userName || userName,
       mediaLinks: row.mediaLinks || ""
     }));
   });
@@ -1167,7 +1167,7 @@ function renderOwner() {
 }
 
 function renderManager() {
-  const rows = searchRows(state.manager, ["userName", "managerName", "usedProduct"]);
+  const rows = searchRows(state.manager, ["managerName", "usedProduct"]);
   const k = getManagerKpis();
   document.getElementById("managerPage").innerHTML = `
     ${sectionHead("Dashboard Manager", "Monitoring omzet, biaya operasional, produk/obat terpakai, dan bonus target tim.")}
@@ -1180,7 +1180,7 @@ function renderManager() {
       ${kpi("Bonus Tim", compactMoney(k.teamBonus))}
     </div>
     ${managerForm()}
-    ${tableCard("Laporan Manager", "manager", rows, ["date","userName","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"])}
+    ${tableCard("Laporan Manager", "manager", rows, ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"])}
   `;
   bindForm("managerForm", addManager);
 }
@@ -1188,7 +1188,6 @@ function renderManager() {
 function managerForm() {
   return formCard("managerForm", "Form Input Laporan Manager", "manager", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
     input("managerName", "Nama Manager"),
     input("adSpend", "Pengeluaran Biaya Iklan", "number"),
     input("otherExpense", "Pengeluaran Lain-lain", "number"),
@@ -1236,7 +1235,7 @@ function renderCrm() {
 function crmForm() {
   return formCard("crmForm", "Form Input Lead", "crm", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
+    input("userName", "Nama CRM"),
     input("id", "Lead ID", "text", nextId("LD", state.crm.length + 1001)),
     input("name", "Nama/Inisial Pasien"),
     select("gender", "Jenis Kelamin", ["Perempuan", "Laki-laki"]),
@@ -1290,7 +1289,7 @@ function renderMarketing() {
 function marketingForm() {
   return formCard("marketingForm", "Form Input Laporan Iklan Harian", "marketing", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
+    input("userName", "Nama Marketing Digital & Ads"),
     select("platform", "Platform", splitSetting("platforms")),
     input("name", "Campaign Name"),
     select("objective", "Objective", ["Lead Generation", "Messages", "Traffic", "Search", "Awareness"]),
@@ -1321,7 +1320,7 @@ function renderContent() {
   const rows = searchRows(state.content, ["id", "title", "platform", "status"]);
   const k = getContentKpis();
   document.getElementById("contentPage").innerHTML = `
-    ${sectionHead("Content Creator", "Kalender, pipeline, dan performa konten.")}
+    ${sectionHead("Creative Performance", "Kalender, pipeline, dan performa konten.")}
     <div class="kpi-grid">
       ${kpi("Total Konten Dibuat", k.total)}
       ${kpi("Total Konten Publish", k.posted)}
@@ -1332,7 +1331,7 @@ function renderContent() {
     </div>
     ${contentForm()}
     <div class="table-card"><h3>Pipeline Konten</h3><div class="kanban-board">${kanban()}</div></div>
-    ${tableCard("Content Calendar", "content", rows, ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"])}
+    ${tableCard("Creative Performance Calendar", "content", rows, ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"])}
   `;
   bindForm("contentForm", addContent);
 }
@@ -1340,7 +1339,7 @@ function renderContent() {
 function contentForm() {
   return formCard("contentForm", "Form Input Konten", "content", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
+    input("userName", "Nama Creative Performance"),
     input("id", "Content ID", "text", nextId("CT", state.content.length + 205)),
     input("title", "Judul Konten"),
     select("platform", "Platform", splitSetting("platforms")),
@@ -1371,7 +1370,7 @@ async function addContent(data, fileFields = {}) {
 }
 
 function renderDoctor() {
-  const rows = searchRows(state.doctor, ["userName", "doctorName", "patientName", "bookingId", "treatmentName", "status"]);
+  const rows = searchRows(state.doctor, ["doctorName", "patientName", "bookingId", "treatmentName", "status"]);
   const k = getDoctorKpis();
   document.getElementById("doctorPage").innerHTML = `
     ${sectionHead("Dashboard Dokter", "Laporan tindakan dokter, keluhan pasien, aftercare, rebooking, dan dokumentasi before-after.")}
@@ -1383,7 +1382,7 @@ function renderDoctor() {
       ${kpi("Rekomendasi Rebooking", k.rebooking)}
     </div>
     ${doctorForm()}
-    ${tableCard("Laporan Dokter", "doctor", rows, ["date","userName","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"])}
+    ${tableCard("Laporan Dokter", "doctor", rows, ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"])}
   `;
   bindForm("doctorForm", addDoctor);
 }
@@ -1391,7 +1390,6 @@ function renderDoctor() {
 function doctorForm() {
   return formCard("doctorForm", "Form Input Laporan Dokter", "doctor", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
     input("doctorName", "Nama Dokter"),
     input("patientName", "Nama Lengkap Pasien"),
     input("bookingId", "Booking ID"),
@@ -1438,7 +1436,7 @@ function renderMedis() {
 function medisForm() {
   return formCard("medisForm", "Form Input Laporan Treatment", "medis", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
+    input("userName", "Nama Tim Medis"),
     input("patientId", "Patient ID"),
     input("bookingId", "Booking ID"),
     select("treatmentName", "Treatment", splitSetting("treatments")),
@@ -1541,7 +1539,7 @@ function renderInventory() {
 function inventoryForm() {
   return formCard("inventoryForm", "Master Barang / Stock In / Stock Out", "inventory", [
     input("date", "Tanggal", "date"),
-    input("userName", "Nama"),
+    input("userName", "Nama GA"),
     input("id", "Product ID"),
     input("name", "Nama Barang"),
     input("category", "Kategori"),
@@ -1592,11 +1590,11 @@ function renderReports() {
         ${kpi("Rekap Bulanan", compactMoney(getKpis().revenue * 4.1))}
       </div>
     </div>
-    ${tableCard("Manager Summary", "manager", state.manager, ["date","userName","managerName","dailyRevenue","totalRevenue","teamBonus"])}
+    ${tableCard("Manager Summary", "manager", state.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
     ${tableCard("Marketing Summary", "marketing", state.marketing, ["date","userName","platform","name","spend","leads","revenue","roas"])}
-    ${tableCard("Content Summary", "content", state.content, ["date","userName","id","title","platform","status","leads"])}
+    ${tableCard("Creative Performance Summary", "content", state.content, ["date","userName","id","title","platform","status","leads"])}
     ${tableCard("CRM Summary", "crm", state.crm, ["date","userName","id","name","status","category","interest","revenue"])}
-    ${tableCard("Dokter Summary", "doctor", state.doctor, ["date","userName","doctorName","patientName","bookingId","treatmentName","status"])}
+    ${tableCard("Dokter Summary", "doctor", state.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
     ${tableCard("Inventory Summary", "inventory", state.inventory, ["date","userName","id","name","finalStock","minimum","stockStatus","expired"])}
   `;
   bindExports();
@@ -1683,7 +1681,7 @@ function tableCard(title, dataset, rows, columns) {
       <div><h2>${title}</h2><p>${dataRows.length} data tampil</p></div>
       ${exportActions(dataset)}
     </div>
-    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
+    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col, dataset)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
       ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><div class="action-buttons"><button class="ghost-button" data-edit="${dataset}" data-index="${row.__index}">Edit</button><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></div></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state">Belum ada data untuk filter ini.</div>`}
   </div>`;
@@ -1811,7 +1809,7 @@ function openEditReport(dataset, index) {
       <h2>Edit ${escapeHtml(exportTitle(dataset))}</h2>
       <p>Owner dapat memperbarui laporan yang dikirim oleh divisi.</p>
     </div>
-    <div class="form-grid">${fields.map(field => editReportField(field, row[field])).join("")}</div>
+    <div class="form-grid">${fields.map(field => editReportField(field, row[field], dataset)).join("")}</div>
     <div class="modal-actions">
       <button class="ghost-button" type="button" id="cancelEditReport">Batal</button>
       <button class="primary-button" type="submit">Simpan Perubahan</button>
@@ -1846,14 +1844,14 @@ function ensureEditReportModal() {
   return modal;
 }
 
-function editReportField(field, value) {
+function editReportField(field, value, dataset = "") {
   const safeValue = field === "ownerNote" ? ownerNoteValue(value) : String(value ?? "");
   const maxLength = field === "ownerNote" ? ` maxlength="${OWNER_NOTE_MAX_LENGTH}"` : "";
   if (TEXTAREA_REPORT_FIELDS.has(field)) {
-    return `<label>${label(field)}<textarea name="${field}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
+    return `<label>${label(field, dataset)}<textarea name="${field}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
   }
   const type = DATE_REPORT_FIELDS.has(field) ? "date" : NUMERIC_REPORT_FIELDS.has(field) ? "number" : "text";
-  return `<label>${label(field)}<input name="${field}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
+  return `<label>${label(field, dataset)}<input name="${field}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
 }
 
 function normalizeEditValue(field, value) {
@@ -2152,7 +2150,7 @@ function getExportSections(dataset) {
   return keys.map(key => {
     const rows = (state[key] || []).map(normalizeRow);
     const headers = rows.length ? Object.keys(rows[0]).filter(x => x !== "__index") : [];
-    return { title: exportTitle(key), headers, rows };
+    return { title: exportTitle(key), dataset: key, headers, rows };
   });
 }
 
@@ -2206,7 +2204,7 @@ function exportSectionHtml(section) {
   return `<section>
     <h2>${escapeHtml(section.title)}</h2>
     <table>
-      <thead><tr>${headers.map(key => `<th>${escapeHtml(label(key))}</th>`).join("")}</tr></thead>
+      <thead><tr>${headers.map(key => `<th>${escapeHtml(label(key, section.dataset))}</th>`).join("")}</tr></thead>
       <tbody>${section.rows.map(row => `<tr>${headers.map(key => `<td>${escapeHtml(formatExportValue(key, row[key]))}</td>`).join("")}</tr>`).join("")}</tbody>
     </table>
   </section>`;
@@ -2218,7 +2216,7 @@ function exportTitle(dataset) {
     crm: "CRM Dashboard",
     manager: "Dashboard Manager",
     marketing: "Dashboard Marketing Digital & Ads",
-    content: "Dashboard Content Creator",
+    content: "Dashboard Creative Performance",
     doctor: "Dashboard Dokter",
     medis: "Dashboard Tim Medis",
     inventory: "Dashboard Inventory",
@@ -2359,10 +2357,10 @@ function compactMoney(value) {
   return money(amount);
 }
 function nextId(prefix, number) { return `${prefix}-${number}`; }
-function label(key) {
+function label(key, dataset = "") {
+  if (key === "userName") return userNameLabel(dataset);
   const labels = {
     date: "Tanggal",
-    userName: "Nama",
     managerName: "Nama Manager",
     doctorName: "Nama Dokter",
     patientName: "Nama Lengkap Pasien",
@@ -2410,7 +2408,18 @@ function mediaLinks(value) {
 }
 function badgeClass(value) { return String(value).toLowerCase().replace(/\s+/g, "-"); }
 function sectionLabel(section) {
-  return { manager: "Manager", marketing: "Digital Marketing", content: "Design Content", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" }[section] || section;
+  return { manager: "Manager", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" }[section] || section;
+}
+function userNameLabel(dataset) {
+  return {
+    marketing: "Nama Marketing Digital & Ads",
+    content: "Nama Creative Performance",
+    crm: "Nama CRM",
+    medis: "Nama Tim Medis",
+    medisSchedule: "Nama Tim Medis",
+    inventory: "Nama GA",
+    inventoryAlerts: "Nama GA"
+  }[dataset] || "Nama";
 }
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
