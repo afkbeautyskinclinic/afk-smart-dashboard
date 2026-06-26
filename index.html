@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AFK Beauty Clinic Smart Dashboard</title>
+  <title>AFK Growth Intelligence Dashboard</title>
   <meta name="theme-color" content="#F81894">
-  <meta name="description" content="Dashboard klinik kecantikan AFK Beauty Clinic untuk CRM, Marketing, Content, Medis, Inventory, dan Owner.">
+  <meta name="description" content="AFK Growth Intelligence Dashboard untuk Owner, CRM, Marketing, Content, Medis, dan Inventory.">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="AFK Dashboard">
+  <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.8">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.11">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -216,6 +216,25 @@ fieldset:disabled { opacity: .72; }
 table { width: 100%; border-collapse: collapse; min-width: 880px; }
 th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 13px; }
 th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky; top: 0; z-index: 1; }
+.action-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 136px; }
+.owner-note-cell { min-width: 230px; max-width: 270px; }
+.owner-note-input {
+  width: 100%;
+  max-width: 240px;
+  min-height: 58px;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.owner-note-text {
+  display: block;
+  max-width: 240px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.owner-note-count { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .badge { display: inline-flex; align-items: center; border-radius: 99px; padding: 5px 9px; font-size: 12px; font-weight: 800; }
 .hot { background: #ffe3e3; color: #c81f1f; }
 .warm { background: #fff0d6; color: #b45d00; }
@@ -258,6 +277,21 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
 .login-modal img { width: 80px; justify-self: center; }
 .login-modal h2, .login-modal p { margin: 0; text-align: center; }
 .modal-actions { display: flex; justify-content: end; gap: 10px; }
+.edit-report-modal { max-width: 980px; width: calc(100% - 32px); }
+.edit-report-modal form { max-height: calc(100vh - 48px); overflow: auto; }
+.edit-report-modal .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.edit-report-modal textarea { min-height: 92px; resize: vertical; }
+.edit-report-modal label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.edit-report-modal input,
+.edit-report-modal select,
+.edit-report-modal textarea {
+  min-height: 42px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
 .mobile-nav { display: none; }
 .empty-state { padding: 24px; color: var(--muted); text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
 
@@ -518,7 +552,7 @@ tbody tr:hover {
   .topbar { gap: 10px; }
   .role-box { grid-column: 1 / -1; }
   .hero-band { padding: 16px; }
-  .hero-metrics, .kpi-grid, .form-grid, .three-col { grid-template-columns: 1fr; }
+  .hero-metrics, .kpi-grid, .form-grid, .three-col, .edit-report-modal .form-grid { grid-template-columns: 1fr; }
   .section-head { align-items: start; flex-direction: column; }
   .filter-row > * { max-width: none; width: 100%; }
   .title-block h1 { font-size: 23px; }
@@ -551,8 +585,8 @@ tbody tr:hover {
       <div class="brand">
         <img src="assets/logo-afk.png" alt="AFK Beauty Skin Clinic">
         <div>
-          <strong>AFK Beauty</strong>
-          <span>Smart Dashboard</span>
+          <strong>AFK Growth</strong>
+          <span>Intelligence Dashboard</span>
         </div>
       </div>
       <nav class="nav-list" id="navList"></nav>
@@ -595,7 +629,7 @@ tbody tr:hover {
 
       <section class="hero-band">
         <div>
-          <p>AFK Beauty Clinic Smart Dashboard</p>
+          <p>AFK Growth Intelligence Dashboard</p>
           <h2>Real time, Up to date, dan Laporan tim terpusat.</h2>
         </div>
         <div class="hero-metrics">
@@ -643,7 +677,9 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-24-owner-settings-locked";
+const SETTINGS_REVISION = "2026-06-26-owner-edit-dashboard-name";
+const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
+const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ryan CRM, Rizki Digital Marketing & Ads, Nur Hikmah Medis, Ridho Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
@@ -680,6 +716,17 @@ let pdfExportInProgress = false;
 let autoSyncTimer = null;
 let autoSyncPaused = false;
 const OWNER_MANAGED_DATASETS = new Set(["crm", "marketing", "content", "medis", "inventory"]);
+const OWNER_NOTE_MAX_LENGTH = 160;
+const EDITABLE_REPORT_FIELDS = {
+  crm: ["date","id","name","gender","address","wa","interest","status","category","followUp","note","revenue","bottleneck","ownerNote"],
+  marketing: ["date","platform","name","objective","spend","impressions","clicks","leads","qualified","booking","showUp","treatment","revenue","bottleneck","ownerNote"],
+  content: ["date","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","ownerNote"],
+  medis: ["date","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"],
+  inventory: ["id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","bottleneck","ownerNote"]
+};
+const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","impressions","clicks","leads","qualified","booking","showUp","treatment","views","reach","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
+const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired"]);
+const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","products","aftercare","rebooking","complaint","mediaLinks"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -730,7 +777,7 @@ function defaultState() {
   return {
     session: { role: "Owner", authenticated: false },
     settings: {
-      brandName: "AFK Beauty Clinic Smart Dashboard",
+      brandName: DEFAULT_DASHBOARD_NAME,
       primaryColor: DEFAULT_PRIMARY_COLOR,
       divisions: "CRM, Digital Marketing, Design Content, Medis, Inventory",
       pics: DEFAULT_PIC_LIST,
@@ -846,6 +893,7 @@ function normalizeDashboardState(targetState) {
   targetState.settings = {
     ...defaultState().settings,
     ...(targetState.settings || {}),
+    brandName: LEGACY_DASHBOARD_NAMES.has(targetState.settings?.brandName) || !targetState.settings?.brandName ? DEFAULT_DASHBOARD_NAME : targetState.settings.brandName,
     primaryColor: !targetState.settings?.primaryColor || targetState.settings.primaryColor.toLowerCase() === "#f81894" ? DEFAULT_PRIMARY_COLOR : targetState.settings.primaryColor,
     pics: DEFAULT_PIC_LIST,
     treatments: DEFAULT_TREATMENT_LIST,
@@ -1380,6 +1428,7 @@ function renderReports() {
   `;
   bindExports();
   bindDeletes();
+  bindEdits();
   bindOwnerNotes();
 }
 
@@ -1462,7 +1511,7 @@ function tableCard(title, dataset, rows, columns) {
       ${exportActions(dataset)}
     </div>
     ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
-      ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></td>` : ""}</tr>`).join("")}
+      ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><div class="action-buttons"><button class="ghost-button" data-edit="${dataset}" data-index="${row.__index}">Edit</button><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></div></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state">Belum ada data untuk filter ini.</div>`}
   </div>`;
 }
@@ -1479,11 +1528,16 @@ function normalizeRow(row) {
   };
 }
 
+function ownerNoteValue(value) {
+  return String(value ?? "").slice(0, OWNER_NOTE_MAX_LENGTH);
+}
+
 function tableCell(dataset, row, col) {
   const value = row[col] ?? "";
   if (col === "ownerNote") {
-    if (canOwnerNote()) return `<td><input class="owner-note-input" data-note-dataset="${dataset}" data-index="${row.__index}" value="${escapeHtml(value)}" placeholder="Catatan Owner"></td>`;
-    return `<td>${escapeHtml(value)}</td>`;
+    const noteValue = ownerNoteValue(value);
+    if (canOwnerNote()) return `<td class="owner-note-cell"><textarea class="owner-note-input" maxlength="${OWNER_NOTE_MAX_LENGTH}" data-note-dataset="${dataset}" data-index="${row.__index}" placeholder="Catatan Owner">${escapeHtml(noteValue)}</textarea><small class="owner-note-count">${noteValue.length}/${OWNER_NOTE_MAX_LENGTH}</small></td>`;
+    return `<td class="owner-note-cell"><span class="owner-note-text">${escapeHtml(noteValue)}</span></td>`;
   }
   if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
@@ -1511,6 +1565,7 @@ function bindForm(id, handler) {
   });
   bindExports();
   bindDeletes();
+  bindEdits();
   bindOwnerNotes();
 }
 
@@ -1559,15 +1614,96 @@ function bindDeletes() {
     });
   });
 }
+
+function bindEdits() {
+  document.querySelectorAll("[data-edit]").forEach(button => {
+    if (button.dataset.editBound === "true") return;
+    button.dataset.editBound = "true";
+    button.addEventListener("click", () => {
+      const dataset = button.dataset.edit;
+      const index = Number(button.dataset.index);
+      openEditReport(dataset, index);
+    });
+  });
+}
+
+function openEditReport(dataset, index) {
+  if (!canManageDataset(dataset)) return toast("Hanya Owner yang bisa edit laporan tersebut.");
+  const row = state[dataset]?.[index];
+  if (!row) return toast("Data laporan tidak ditemukan.");
+  const fields = EDITABLE_REPORT_FIELDS[dataset] || Object.keys(row).filter(key => key !== "__index");
+  const modal = ensureEditReportModal();
+  modal.innerHTML = `<form method="dialog" class="form-card" id="editReportForm">
+    <div>
+      <h2>Edit ${escapeHtml(exportTitle(dataset))}</h2>
+      <p>Owner dapat memperbarui laporan yang dikirim oleh divisi.</p>
+    </div>
+    <div class="form-grid">${fields.map(field => editReportField(field, row[field])).join("")}</div>
+    <div class="modal-actions">
+      <button class="ghost-button" type="button" id="cancelEditReport">Batal</button>
+      <button class="primary-button" type="submit">Simpan Perubahan</button>
+    </div>
+  </form>`;
+
+  const form = modal.querySelector("#editReportForm");
+  modal.querySelector("#cancelEditReport").addEventListener("click", () => modal.close());
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    const nextRow = { ...state[dataset][index] };
+    new FormData(form).forEach((value, key) => {
+      nextRow[key] = normalizeEditValue(key, value);
+    });
+    state[dataset][index] = nextRow;
+    saveState();
+    modal.close();
+    renderAll();
+    toast("Laporan berhasil diperbarui.");
+  });
+  modal.showModal();
+}
+
+function ensureEditReportModal() {
+  let modal = document.getElementById("editReportModal");
+  if (!modal) {
+    modal = document.createElement("dialog");
+    modal.id = "editReportModal";
+    modal.className = "login-modal edit-report-modal";
+    document.body.appendChild(modal);
+  }
+  return modal;
+}
+
+function editReportField(field, value) {
+  const safeValue = field === "ownerNote" ? ownerNoteValue(value) : String(value ?? "");
+  const maxLength = field === "ownerNote" ? ` maxlength="${OWNER_NOTE_MAX_LENGTH}"` : "";
+  if (TEXTAREA_REPORT_FIELDS.has(field)) {
+    return `<label>${label(field)}<textarea name="${field}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
+  }
+  const type = DATE_REPORT_FIELDS.has(field) ? "date" : NUMERIC_REPORT_FIELDS.has(field) ? "number" : "text";
+  return `<label>${label(field)}<input name="${field}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
+}
+
+function normalizeEditValue(field, value) {
+  if (field === "ownerNote") return ownerNoteValue(value);
+  if (NUMERIC_REPORT_FIELDS.has(field)) return num(value);
+  return String(value ?? "");
+}
+
 function bindOwnerNotes() {
   document.querySelectorAll("[data-note-dataset]").forEach(inputEl => {
     if (inputEl.dataset.noteBound === "true") return;
     inputEl.dataset.noteBound = "true";
+    inputEl.addEventListener("input", () => {
+      inputEl.value = ownerNoteValue(inputEl.value);
+      const counter = inputEl.parentElement?.querySelector(".owner-note-count");
+      if (counter) counter.textContent = `${inputEl.value.length}/${OWNER_NOTE_MAX_LENGTH}`;
+    });
     inputEl.addEventListener("change", () => {
       const dataset = inputEl.dataset.noteDataset;
       const index = Number(inputEl.dataset.index);
       if (state[dataset] && state[dataset][index]) {
-        state[dataset][index].ownerNote = inputEl.value;
+        state[dataset][index].ownerNote = ownerNoteValue(inputEl.value);
+        inputEl.value = state[dataset][index].ownerNote;
         saveState();
         toast("Catatan Owner berhasil disimpan.");
       }
@@ -1766,7 +1902,7 @@ function exportPdf(dataset) {
   if (!sections.length) return toast("Belum ada data untuk diexport.");
   pdfExportInProgress = true;
 
-  const title = `AFK Beauty - ${exportTitle(dataset)}`;
+  const title = `${state.settings.brandName || DEFAULT_DASHBOARD_NAME} - ${exportTitle(dataset)}`;
   const printedAt = new Date().toLocaleString("id-ID");
   const sectionHtml = sections.map(section => exportSectionHtml(section)).join("");
   const frame = document.createElement("iframe");
