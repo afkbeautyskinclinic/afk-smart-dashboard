@@ -981,7 +981,7 @@ function bindGlobalEvents() {
   });
   els.globalSearch.addEventListener("input", () => {
     clearTimeout(searchRenderTimer);
-    searchRenderTimer = setTimeout(renderAll, 500);
+    searchRenderTimer = setTimeout(renderAll, 1200);
   });
   els.globalSearch.addEventListener("search", renderAll);
   els.globalSearch.addEventListener("change", renderAll);
