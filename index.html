@@ -979,14 +979,16 @@ function bindGlobalEvents() {
     els.roleSelect.value = currentRole;
     els.loginModal.close();
   });
-  els.globalSearch.addEventListener("input", () => {
-    clearTimeout(searchRenderTimer);
-    searchRenderTimer = setTimeout(renderAll, 1200);
-  });
-  els.globalSearch.addEventListener("search", renderAll);
-  els.globalSearch.addEventListener("change", renderAll);
+  els.globalSearch.addEventListener("input", scheduleSearchRender);
+  els.globalSearch.addEventListener("search", scheduleSearchRender);
+  els.globalSearch.addEventListener("change", scheduleSearchRender);
   els.menuToggle.addEventListener("click", () => els.sidebar.classList.toggle("open"));
   document.getElementById("notifyButton").addEventListener("click", () => toast("5 alert aktif: follow up, no show, stok, konten, laporan."));
+}
+
+function scheduleSearchRender() {
+  clearTimeout(searchRenderTimer);
+  searchRenderTimer = setTimeout(renderAll, 1200);
 }
 
 function initInstallExperience() {
