@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.19">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.20">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -681,7 +681,7 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-30-dynamic-spreadsheet-columns";
+const SETTINGS_REVISION = "2026-06-30-backend-first-refresh";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -778,15 +778,16 @@ const els = {
 
 document.addEventListener("DOMContentLoaded", init);
 
-function init() {
+async function init() {
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
   initInstallExperience();
   registerServiceWorker();
-  initAutoSync();
   renderAll();
   if (!state.session.authenticated) openLogin(currentRole);
+  await refreshFromBackendOnStart();
+  initAutoSync();
 }
 
 function defaultState() {
@@ -889,8 +890,13 @@ function saveState() {
 
 function initAutoSync() {
   window.addEventListener("online", () => scheduleAutoSync(300));
-  const syncStatus = getSyncStatus();
-  if (syncStatus.pending) scheduleAutoSync(1200);
+  clearTimeout(autoSyncTimer);
+}
+
+async function refreshFromBackendOnStart() {
+  const backend = getBackendConfig();
+  if (!backend.url) return null;
+  return fetchFromGoogleSheets({ silent: true, source: "startup" });
 }
 
 function scheduleAutoSync(delay = 1400) {
@@ -2427,7 +2433,7 @@ function getOwnerExportSections() {
 }
 
 function exportSectionHtml(section) {
-  const headers = section.headers.length ? section.headers : Object.keys(section.rows[0] || {}).filter(x => x !== "__index");
+  const headers = section.headers.length ? section.headers : collectRowKeys(section.rows);
   return `<section>
     <h2>${escapeHtml(section.title)}</h2>
     <table>
@@ -2503,10 +2509,10 @@ async function syncToGoogleSheets(options = {}) {
   }
 }
 
-async function fetchFromGoogleSheets() {
+async function fetchFromGoogleSheets(options = {}) {
   const backend = getBackendConfig();
   if (!backend.url) {
-    toast("Isi Google Apps Script Web App URL di Settings untuk mengambil data.");
+    if (!options.silent) toast("Isi Google Apps Script Web App URL di Settings untuk mengambil data.");
     return null;
   }
 
@@ -2514,8 +2520,9 @@ async function fetchFromGoogleSheets() {
     const url = new URL(backend.url);
     url.searchParams.set("action", "fetch");
     if (backend.token) url.searchParams.set("token", backend.token);
+    url.searchParams.set("_", Date.now().toString());
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { cache: "no-store" });
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
 
@@ -2526,7 +2533,6 @@ async function fetchFromGoogleSheets() {
     };
     normalizeDashboardState(state);
     mergeFetchedColumnMetadata(result);
-    mergeFetchedColumnMetadata(result);
     delete state.settings.backendUrl;
     delete state.settings.backendToken;
     state.settingsRevision = SETTINGS_REVISION;
@@ -2535,11 +2541,11 @@ async function fetchFromGoogleSheets() {
     autoSyncPaused = false;
     setSyncStatus({ pending: false, lastFetchAt: new Date().toISOString(), lastError: "" });
     renderAll();
-    toast("Data berhasil diambil dari Google Sheets.");
+    if (!options.silent) toast("Data berhasil diambil dari Google Sheets.");
     return result.data;
   } catch (error) {
     autoSyncPaused = false;
-    toast(`Ambil data Google Sheets gagal: ${error.message}`);
+    if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
   }
 }
