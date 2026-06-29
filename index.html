@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.17">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.18">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -681,7 +681,7 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-30-crm-lead-form-layout";
+const SETTINGS_REVISION = "2026-06-30-crm-status-upselling-layout";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -732,14 +732,14 @@ const EDITABLE_REPORT_FIELDS = {
   manager: ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
   marketing: ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"],
   content: ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"],
-  crm: ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upsales","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"],
+  crm: ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"],
   doctor: ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"],
   medis: ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"],
   inventory: ["date","userName","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","mediaLinks","bottleneck","ownerNote"]
 };
 const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired"]);
-const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient"]);
+const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -815,11 +815,11 @@ function defaultState() {
       content("2026-06-21", "Rani Creative Performance", "CT-204", "Checklist Aftercare", "Instagram", "Story", "Simpan panduan setelah treatment", "Save post ini", "https://drive.example/aftercare", "2026-06-23", 8200, 7100, 360, 44, 25, 188, 7, "Editing")
     ],
     crm: [
-      lead("2026-06-17", "Ryan CRM", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Slimming Package", "Iklan", "Hot", "Konsultasi", "2026-06-24", "dr. Keisha", "Mila", 300000, 2500000, "Ingin konsultasi body contour", "Butuh follow up cepat", ""),
-      lead("2026-06-18", "Ryan CRM", "LD-1002", "MK", "Perempuan", "Depok", "628121110002", "Mini Surgery", "Scar Care", "Iklan", "Warm", "Booking", "2026-06-23", "dr. Arya", "Tari", 0, 1800000, "Booking Sabtu sore", "Tanya cicilan", ""),
-      lead("2026-06-19", "Ryan CRM", "LD-1003", "AR", "Laki-laki", "Bekasi", "628121110003", "Mini Surgery", "Aftercare Kit", "Data Base", "Cold", "Lost", "2026-06-25", "dr. Nabila", "Reno", 0, 0, "Budget belum cocok", "Perlu penawaran entry", ""),
-      lead("2026-06-20", "Ryan CRM", "LD-1004", "DN", "Perempuan", "Tangerang", "628121110004", "Vaser Liposuction", "Korset Premium", "Qualified", "Hot", "Treatment", "2026-06-27", "dr. Arya", "Mila", 1200000, 18500000, "Datang dengan referral", "Closing premium bagus", ""),
-      lead("2026-06-21", "Ryan CRM", "LD-1005", "SA", "Perempuan", "Bogor", "628121110005", "Mini Surgery", "Sunscreen Aftercare", "Booking", "Warm", "Show Up", "2026-06-26", "dr. Keisha", "Tari", 150000, 950000, "Minta dokter perempuan", "Slot dokter terbatas", "")
+      lead("2026-06-17", "Ryan CRM", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Slimming Package", "Iklan", "Hot", "Konsultasi", "2026-06-24", "dr. Keisha", "Mila", "Serum aftercare", 2500000, "Ingin konsultasi body contour", "Butuh follow up cepat", ""),
+      lead("2026-06-18", "Ryan CRM", "LD-1002", "MK", "Perempuan", "Depok", "628121110002", "Mini Surgery", "Scar Care", "Iklan", "Warm", "Booking", "2026-06-23", "dr. Arya", "Tari", "", 1800000, "Booking Sabtu sore", "Tanya cicilan", ""),
+      lead("2026-06-19", "Ryan CRM", "LD-1003", "AR", "Laki-laki", "Bekasi", "628121110003", "Mini Surgery", "Aftercare Kit", "Data Base", "Cold", "Lost", "2026-06-25", "dr. Nabila", "Reno", "", 0, "Budget belum cocok", "Perlu penawaran entry", ""),
+      lead("2026-06-20", "Ryan CRM", "LD-1004", "DN", "Perempuan", "Tangerang", "628121110004", "Vaser Liposuction", "Korset Premium", "Referral", "Hot", "Treatment", "2026-06-27", "dr. Arya", "Mila", "Korset premium", 18500000, "Datang dengan referral", "Closing premium bagus", ""),
+      lead("2026-06-21", "Ryan CRM", "LD-1005", "SA", "Perempuan", "Bogor", "628121110005", "Mini Surgery", "Sunscreen Aftercare", "Walk In", "Warm", "Show Up", "2026-06-26", "dr. Keisha", "Tari", "Sunscreen aftercare", 950000, "Minta dokter perempuan", "Slot dokter terbatas", "")
     ],
     doctor: [
       doctorReport("2026-06-18", "dr. Keisha", "Nadia Putri", "BK-702", "Mini Surgery", "Tari", "Minor surgery kit", "Antibiotik topikal", "Selesai", "Kemerahan ringan", "Kontrol luka sesuai jadwal", "2 minggu", "Edukasi aftercare perlu diperjelas", ""),
@@ -843,8 +843,8 @@ function defaultState() {
 function managerReport(date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks = "", ownerNote = "") {
   return { date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks, ownerNote };
 }
-function lead(date, userName, id, name, gender, address, wa, interest, productInterest, status, category, responseLead, followUp, doctor, nurseBeautician, upsales, revenue, voiceOfPatient, bottleneck, ownerNote, mediaLinks = "") {
-  return { date, userName, id, name, gender, address, wa, interest, productInterest, status, category, responseLead, followUp, doctor, nurseBeautician, upsales, revenue, voiceOfPatient, bottleneck, mediaLinks, ownerNote };
+function lead(date, userName, id, name, gender, address, wa, interest, productInterest, status, category, responseLead, followUp, doctor, nurseBeautician, upSellingCrossSelling, revenue, voiceOfPatient, bottleneck, ownerNote, mediaLinks = "") {
+  return { date, userName, id, name, gender, address, wa, interest, productInterest, status, category, responseLead, followUp, doctor, nurseBeautician, upSellingCrossSelling, revenue, voiceOfPatient, bottleneck, mediaLinks, ownerNote };
 }
 function campaign(date, userName, platform, name, objective, spend, reach, impressions, ctr, cpc, clicks, whatsappChats, cpr, frequency, leads, qualified, booking, showUp, treatment, revenue, roas, adSetSetting, bottleneck, ownerNote, mediaLinks = "") {
   return { date, userName, platform, name, objective, spend, reach, impressions, ctr, cpc, clicks, whatsappChats, cpr, frequency, leads, qualified, booking, showUp, treatment, revenue, roas, adSetSetting, bottleneck, mediaLinks, ownerNote };
@@ -977,15 +977,24 @@ function migrateCrmRows(targetState) {
     const next = { ...row };
     next.productInterest = next.productInterest || "";
     next.responseLead = next.responseLead || normalizeCrmResponse(next.status);
+    next.status = normalizeCrmStatus(next.status);
     next.doctor = next.doctor || "";
     next.nurseBeautician = next.nurseBeautician || "";
-    next.upsales = num(next.upsales);
+    next.upSellingCrossSelling = next.upSellingCrossSelling || (next.upsales ? String(next.upsales) : "");
     next.revenue = num(next.revenue);
     next.voiceOfPatient = next.voiceOfPatient || next.note || "";
     next.mediaLinks = next.mediaLinks || "";
     next.bottleneck = next.bottleneck || "";
     return next;
   });
+}
+
+function normalizeCrmStatus(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("data")) return "Data Base";
+  if (normalized.includes("walk")) return "Walk In";
+  if (normalized.includes("referral")) return "Referral";
+  return "Iklan";
 }
 
 function normalizeCrmResponse(value) {
@@ -1286,7 +1295,7 @@ async function addManager(data, fileFields = {}) {
 }
 
 function renderCrm() {
-  const rows = searchRows(state.crm, ["id", "name", "wa", "interest", "productInterest", "status", "category", "responseLead", "doctor", "nurseBeautician", "voiceOfPatient"]);
+  const rows = searchRows(state.crm, ["id", "name", "wa", "interest", "productInterest", "status", "category", "responseLead", "doctor", "nurseBeautician", "upSellingCrossSelling", "voiceOfPatient"]);
   const k = getCrmKpis();
   document.getElementById("crmPage").innerHTML = `
     ${sectionHead("CRM Dashboard", "Input lead, tracking pipeline, dan evaluasi bottleneck.")}
@@ -1300,7 +1309,7 @@ function renderCrm() {
       ${kpi("Lost Rate", pct(k.lostRate))}
     </div>
     ${crmForm()}
-    ${tableCard("Data Leads", "crm", rows, ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upsales","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Data Leads", "crm", rows, ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("crmForm", addCrm);
 }
@@ -1316,13 +1325,13 @@ function crmForm() {
     input("wa", "No WhatsApp"),
     select("interest", "Treatment Interest", splitSetting("treatments")),
     input("productInterest", "Product Interest"),
-    select("status", "Status Lead", ["Iklan", "Data Base", "Qualified", "Booking", "Show Up", "Treatment", "Lost"]),
+    select("status", "Status Lead", ["Iklan", "Data Base", "Walk In", "Referral"]),
     select("category", "Kategori Lead", ["Hot", "Warm", "Cold"]),
     select("responseLead", "Respon Lead", ["Spam", "Hanya Click", "Konsultasi", "Booking", "Show Up", "Treatment", "Pikir-pikir", "Lost"]),
     input("followUp", "Jadwal Follow Up", "date"),
     input("doctor", "Dokter"),
     input("nurseBeautician", "Suster/Beautician"),
-    input("upsales", "Up Sales", "number"),
+    textarea("upSellingCrossSelling", "Up Selling / Cross Selling"),
     input("revenue", "Revenue", "number"),
     textarea("voiceOfPatient", "Voice Of Patient"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
@@ -1331,8 +1340,8 @@ function crmForm() {
 }
 
 async function addCrm(data, fileFields = {}) {
-  data.upsales = num(data.upsales);
   data.revenue = num(data.revenue);
+  data.upSellingCrossSelling = data.upSellingCrossSelling || "";
   data.voiceOfPatient = data.voiceOfPatient || data.note || "";
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "crm", data);
   state.crm.unshift({ ...data, ownerNote: "" });
@@ -1688,7 +1697,7 @@ function renderReports() {
     ${reportSummaryCard("Manager Summary", "manager", reportRows.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
     ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","platform","name","spend","reach","impressions","clicks","whatsappChats","cpr","leads","revenue","roas"])}
     ${reportSummaryCard("Creative Performance Summary", "content", reportRows.content, ["date","userName","id","title","platform","status","leads"])}
-    ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","id","name","interest","productInterest","status","category","responseLead","followUp","upsales","revenue"])}
+    ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","id","name","interest","productInterest","status","category","responseLead","followUp","upSellingCrossSelling","revenue"])}
     ${reportSummaryCard("Dokter Summary", "doctor", reportRows.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
     ${reportSummaryCard("Tim Medis Summary", "medis", reportRows.medis, ["date","userName","patientId","bookingId","treatmentName","status"])}
     ${reportSummaryCard("Inventory Summary", "inventory", reportRows.inventory, ["date","userName","id","name","finalStock","minimum","stockStatus","expired"])}
@@ -2151,10 +2160,10 @@ function select(name, text, options) {
 
 function getKpis() {
   const totalLeads = state.crm.length + sum(state.marketing, "leads") + sum(state.content, "leads");
-  const qualified = state.crm.filter(x => ["Qualified", "Booking", "Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "qualified");
-  const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "booking");
-  const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.status)).length + sum(state.marketing, "showUp");
-  const treatmentCount = state.crm.filter(x => x.status === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
+  const qualified = state.crm.filter(x => ["Konsultasi", "Booking", "Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "qualified");
+  const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "booking");
+  const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "showUp");
+  const treatmentCount = state.crm.filter(x => x.responseLead === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
   const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + sum(state.manager, "dailyRevenue");
   return { totalLeads, qualified, booking, showUp, treatment: treatmentCount, revenue, adSpend: sum(state.marketing, "spend") + sum(state.manager, "adSpend") };
 }
@@ -2163,11 +2172,11 @@ function getManagerKpis() {
 }
 function getCrmKpis() {
   const total = state.crm.length;
-  const qualified = state.crm.filter(x => ["Qualified", "Booking", "Show Up", "Treatment"].includes(x.status)).length;
-  const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.status)).length;
-  const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.status)).length;
-  const treatmentRate = safeDiv(state.crm.filter(x => x.status === "Treatment").length, total);
-  return { total, qualified, bookingRate: safeDiv(booking, total), showUpRate: safeDiv(showUp, booking), treatmentRate, noShowRate: safeDiv(Math.max(0, booking - showUp), booking), lostRate: safeDiv(state.crm.filter(x => x.status === "Lost").length, total) };
+  const qualified = state.crm.filter(x => ["Konsultasi", "Booking", "Show Up", "Treatment"].includes(x.responseLead)).length;
+  const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.responseLead)).length;
+  const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.responseLead)).length;
+  const treatmentRate = safeDiv(state.crm.filter(x => x.responseLead === "Treatment").length, total);
+  return { total, qualified, bookingRate: safeDiv(booking, total), showUpRate: safeDiv(showUp, booking), treatmentRate, noShowRate: safeDiv(Math.max(0, booking - showUp), booking), lostRate: safeDiv(state.crm.filter(x => x.responseLead === "Lost").length, total) };
 }
 function getMarketingKpis() {
   const spend = sum(state.marketing, "spend");
@@ -2304,7 +2313,7 @@ function getExportSections(dataset) {
 function getOwnerAlerts() {
   const k = getKpis();
   return [
-    ["Lead belum difollow up", state.crm.filter(x => new Date(x.followUp) <= new Date() && !["Treatment", "Lost"].includes(x.status)).length],
+    ["Lead belum difollow up", state.crm.filter(x => new Date(x.followUp) <= new Date() && !["Treatment", "Lost"].includes(x.responseLead)).length],
     ["Booking no show", Math.max(0, k.booking - k.showUp)],
     ["Stok menipis", state.inventory.filter(x => stockStatus(x) !== "Aman").length],
     ["Konten belum publish", state.content.filter(x => x.status !== "Posted").length],
@@ -2545,7 +2554,7 @@ function label(key, dataset = "") {
     responseLead: "Respon Lead",
     followUp: "Jadwal Follow Up",
     doctor: "Dokter",
-    upsales: "Up Sales",
+    upSellingCrossSelling: "Up Selling / Cross Selling",
     voiceOfPatient: "Voice Of Patient",
     bottleneck: "Catatan Evaluasi/Bottleneck",
     ownerNote: "Catatan Owner",
