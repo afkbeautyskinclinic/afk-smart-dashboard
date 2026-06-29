@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.15">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.16">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -730,16 +730,16 @@ const OWNER_MANAGED_DATASETS = new Set(["manager", "marketing", "content", "crm"
 const OWNER_NOTE_MAX_LENGTH = 160;
 const EDITABLE_REPORT_FIELDS = {
   manager: ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
-  marketing: ["date","userName","platform","name","objective","spend","impressions","clicks","leads","qualified","booking","showUp","treatment","revenue","mediaLinks","bottleneck","ownerNote"],
+  marketing: ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"],
   content: ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"],
   crm: ["date","userName","id","name","gender","address","wa","interest","status","category","followUp","note","revenue","mediaLinks","bottleneck","ownerNote"],
   doctor: ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"],
   medis: ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"],
   inventory: ["date","userName","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","mediaLinks","bottleneck","ownerNote"]
 };
-const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","impressions","clicks","leads","qualified","booking","showUp","treatment","views","reach","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
+const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired"]);
-const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven"]);
+const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -803,10 +803,10 @@ function defaultState() {
       managerReport("2026-06-22", "Ayu Lestari", 5800000, 950000, "Serum HA Skin Booster", 3400000, 11100000, 13000000, 14500000, 300000000, 282500000, 2500000, "")
     ],
     marketing: [
-      campaign("2026-06-17", "Rizki Digital Marketing & Ads", "Meta Ads", "Skin Barrier Expert", "Lead Generation", 1800000, 32000, 980, 85, 42, 20, 12, 21500000, "Creative before-after paling kuat", ""),
-      campaign("2026-06-18", "Rizki Digital Marketing & Ads", "TikTok Ads", "Acne Clear Story", "Messages", 1250000, 41000, 1540, 76, 33, 18, 9, 12600000, "Hook dokter perform baik", ""),
-      campaign("2026-06-19", "Rizki Digital Marketing & Ads", "Google Ads", "Vaser Search High Intent", "Search", 2100000, 8200, 440, 38, 29, 16, 8, 78000000, "Keyword mahal tapi ROAS tinggi", ""),
-      campaign("2026-06-20", "Rizki Digital Marketing & Ads", "Meta Ads", "Facial Promo Weekend", "Traffic", 950000, 26000, 760, 64, 24, 14, 7, 7200000, "Perlu landing chat lebih cepat", "")
+      campaign("2026-06-17", "Rizki Digital Marketing & Ads", "Meta Ads", "Skin Barrier Expert", "Lead Generation", 1800000, 26000, 32000, 0.0306, 1837, 980, 85, 21176, 1.23, 85, 42, 20, 12, 21500000, 11.9, "Female 22-45, Jakarta, lookalike buyer 1%", "Creative before-after paling kuat", ""),
+      campaign("2026-06-18", "Rizki Digital Marketing & Ads", "TikTok Ads", "Acne Clear Story", "Messages", 1250000, 33000, 41000, 0.0376, 812, 1540, 76, 16447, 1.24, 76, 33, 18, 9, 12600000, 10.1, "Interest acne care, broad testing 3 creatives", "Hook dokter perform baik", ""),
+      campaign("2026-06-19", "Rizki Digital Marketing & Ads", "Google Ads", "Vaser Search High Intent", "Search", 2100000, 7600, 8200, 0.0537, 4773, 440, 38, 55263, 1.08, 38, 29, 16, 8, 78000000, 37.1, "High intent keywords: vaser, liposuction, body contour", "Keyword mahal tapi ROAS tinggi", ""),
+      campaign("2026-06-20", "Rizki Digital Marketing & Ads", "Meta Ads", "Facial Promo Weekend", "Traffic", 950000, 22000, 26000, 0.0292, 1250, 760, 64, 14844, 1.18, 64, 24, 14, 7, 7200000, 7.6, "Weekend promo ad set, retarget IG engagers", "Perlu landing chat lebih cepat", "")
     ],
     content: [
       content("2026-06-15", "Rani Creative Performance", "CT-201", "Mitos Acne Laser", "Instagram", "Reels", "Jerawat tidak selalu karena skincare", "Chat admin sekarang", "https://drive.example/acne", "2026-06-18", 21000, 18000, 1200, 84, 95, 211, 18, "Posted"),
@@ -846,8 +846,8 @@ function managerReport(date, managerName, adSpend, otherExpense, usedProduct, pr
 function lead(date, userName, id, name, gender, address, wa, interest, status, category, followUp, note, revenue, bottleneck, ownerNote, mediaLinks = "") {
   return { date, userName, id, name, gender, address, wa, interest, status, category, followUp, note, revenue, bottleneck, mediaLinks, ownerNote };
 }
-function campaign(date, userName, platform, name, objective, spend, impressions, clicks, leads, qualified, booking, showUp, treatment, revenue, bottleneck, ownerNote, mediaLinks = "") {
-  return { date, userName, platform, name, objective, spend, impressions, clicks, leads, qualified, booking, showUp, treatment, revenue, bottleneck, mediaLinks, ownerNote };
+function campaign(date, userName, platform, name, objective, spend, reach, impressions, ctr, cpc, clicks, whatsappChats, cpr, frequency, leads, qualified, booking, showUp, treatment, revenue, roas, adSetSetting, bottleneck, ownerNote, mediaLinks = "") {
+  return { date, userName, platform, name, objective, spend, reach, impressions, ctr, cpc, clicks, whatsappChats, cpr, frequency, leads, qualified, booking, showUp, treatment, revenue, roas, adSetSetting, bottleneck, mediaLinks, ownerNote };
 }
 function content(date, userName, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status, mediaLinks = "") {
   return { date, userName, id, title, platform, format, hook, cta, asset, publishDate, views, reach, likes, comments, shares, saves, leads, status, mediaLinks, ownerNote: "" };
@@ -931,6 +931,7 @@ function normalizeDashboardState(targetState) {
   delete targetState.settings.backendToken;
   migrateTreatmentNames(targetState);
   migrateCampaignNames(targetState);
+  migrateMarketingRows(targetState);
   migrateDivisionRows(targetState);
   migrateMedicalRows(targetState);
 }
@@ -940,6 +941,34 @@ function migrateCampaignNames(targetState) {
     ...row,
     name: CAMPAIGN_RENAMES[row.name] || row.name
   }));
+}
+
+function migrateMarketingRows(targetState) {
+  targetState.marketing = (targetState.marketing || []).map(row => normalizeMarketingRow(row));
+}
+
+function normalizeMarketingRow(row) {
+  const next = { ...row };
+  next.reach = num(next.reach);
+  next.impressions = num(next.impressions);
+  next.clicks = num(next.clicks);
+  next.whatsappChats = num(next.whatsappChats || next.chat || next.clicks);
+  next.leads = num(next.leads);
+  next.qualified = num(next.qualified);
+  next.booking = num(next.booking);
+  next.showUp = num(next.showUp);
+  next.treatment = num(next.treatment);
+  next.revenue = num(next.revenue);
+  next.spend = num(next.spend);
+  next.ctr = normalizeRateInput(next.ctr || safeDiv(next.clicks, next.impressions));
+  next.cpc = num(next.cpc || safeDiv(next.spend, next.clicks));
+  next.cpr = num(next.cpr || safeDiv(next.spend, next.leads || next.whatsappChats));
+  next.frequency = num(next.frequency || safeDiv(next.impressions, next.reach));
+  next.roas = num(next.roas || safeDiv(next.revenue, next.spend));
+  next.adSetSetting = next.adSetSetting || "";
+  next.mediaLinks = next.mediaLinks || "";
+  next.bottleneck = next.bottleneck || "";
+  return next;
 }
 
 function migrateMedicalRows(targetState) {
@@ -1286,16 +1315,16 @@ function renderMarketing() {
       ${kpi("Impression", k.impressions.toLocaleString("id-ID"))}
       ${kpi("CTR", pct(k.ctr))}
       ${kpi("CPC", compactMoney(k.cpc))}
-      ${kpi("CPL", compactMoney(k.cpl))}
+      ${kpi("CPR", compactMoney(k.cpr))}
       ${kpi("Chat Result", k.chat)}
     </div>
     ${marketingForm()}
     <div class="three-col">
       ${chartCard("Spend vs Revenue", "spendRevenueChart")}
       ${chartCard("Leads per Platform", "platformChart")}
-      ${chartCard("CPL per Campaign", "cplChart")}
+      ${chartCard("CPR per Campaign", "cplChart")}
     </div>
-    ${tableCard("Campaign Report", "marketing", rows, ["date","userName","platform","name","objective","spend","impressions","clicks","leads","qualified","booking","showUp","treatment","revenue","ctr","cpc","cpl","roas","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Campaign Report", "marketing", rows, ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"])}
   `;
   bindForm("marketingForm", addMarketing);
 }
@@ -1308,21 +1337,34 @@ function marketingForm() {
     input("name", "Campaign Name"),
     select("objective", "Objective", ["Lead Generation", "Messages", "Traffic", "Search", "Awareness"]),
     input("spend", "Budget/Spend", "number"),
+    input("reach", "Jangkauan", "number"),
     input("impressions", "Impression", "number"),
+    input("ctr", "CTR (Click-Through Rate)", "number"),
+    input("cpc", "CPC (Cost Per Click)", "number"),
     input("clicks", "Link Click", "number"),
-    input("leads", "Leads", "number"),
+    input("whatsappChats", "Chat Whatsapp", "number"),
+    input("cpr", "CPR (Cost Per Result)", "number"),
+    input("frequency", "Frequency", "number"),
+    input("leads", "Leads Masuk", "number"),
     input("qualified", "Qualified Leads", "number"),
     input("booking", "Booking", "number"),
     input("showUp", "Show Up", "number"),
     input("treatment", "Treatment", "number"),
     input("revenue", "Revenue", "number"),
-    fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
-    textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
+    input("roas", "ROAS", "number"),
+    textarea("adSetSetting", "Setting Ad Set"),
+    textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
+    fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true)
   ]);
 }
 
 async function addMarketing(data, fileFields = {}) {
-  ["spend","impressions","clicks","leads","qualified","booking","showUp","treatment","revenue"].forEach(key => data[key] = num(data[key]));
+  ["spend","reach","impressions","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas"].forEach(key => data[key] = num(data[key]));
+  data.ctr = normalizeRateInput(data.ctr || safeDiv(data.clicks, data.impressions));
+  data.cpc = data.cpc || safeDiv(data.spend, data.clicks);
+  data.cpr = data.cpr || safeDiv(data.spend, data.leads || data.whatsappChats);
+  data.frequency = data.frequency || safeDiv(data.impressions, data.reach);
+  data.roas = data.roas || safeDiv(data.revenue, data.spend);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "marketing", data);
   state.marketing.unshift({ ...data, ownerNote: "" });
   saveState();
@@ -1606,7 +1648,7 @@ function renderReports() {
       </div>
     </div>
     ${reportSummaryCard("Manager Summary", "manager", reportRows.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
-    ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","platform","name","spend","leads","revenue","roas"])}
+    ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","platform","name","spend","reach","impressions","clicks","whatsappChats","cpr","leads","revenue","roas"])}
     ${reportSummaryCard("Creative Performance Summary", "content", reportRows.content, ["date","userName","id","title","platform","status","leads"])}
     ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","id","name","status","category","interest","revenue"])}
     ${reportSummaryCard("Dokter Summary", "doctor", reportRows.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
@@ -1752,10 +1794,12 @@ function normalizeRow(row) {
     ...row,
     finalStock: row.initial !== undefined ? finalStock(row) : row.finalStock,
     stockStatus: row.initial !== undefined ? stockStatus(row) : row.stockStatus,
-    ctr: row.impressions ? safeDiv(row.clicks, row.impressions) : row.ctr,
-    cpc: row.clicks ? safeDiv(row.spend, row.clicks) : row.cpc,
+    ctr: row.ctr !== undefined && row.ctr !== "" ? normalizeRateInput(row.ctr) : safeDiv(row.clicks, row.impressions),
+    cpc: row.cpc !== undefined && row.cpc !== "" ? num(row.cpc) : safeDiv(row.spend, row.clicks),
     cpl: row.leads ? safeDiv(row.spend, row.leads) : row.cpl,
-    roas: row.spend ? safeDiv(row.revenue, row.spend) : row.roas
+    cpr: row.cpr !== undefined && row.cpr !== "" ? num(row.cpr) : safeDiv(row.spend, row.leads || row.whatsappChats),
+    frequency: row.frequency !== undefined && row.frequency !== "" ? num(row.frequency) : safeDiv(row.impressions, row.reach),
+    roas: row.roas !== undefined && row.roas !== "" ? num(row.roas) : safeDiv(row.revenue, row.spend)
   };
 }
 
@@ -1772,7 +1816,7 @@ function tableCell(dataset, row, col) {
   }
   if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
-  if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
+  if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
   if (["ctr"].includes(col)) return `<td>${pct(num(value))}</td>`;
   if (["roas"].includes(col)) return `<td>${num(value).toFixed(1)}x</td>`;
   return `<td>${escapeHtml(value)}</td>`;
@@ -1959,7 +2003,7 @@ function renderCharts() {
   if (activePage === "marketing") {
     makeChart("spendRevenueChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => x.spend), false, state.marketing.map(x => x.revenue));
     makeChart("platformChart", "doughnut", groupLabels(state.marketing, "platform"), groupValues(state.marketing, "platform", "leads"));
-    makeChart("cplChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => safeDiv(x.spend, x.leads)));
+    makeChart("cplChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => normalizeRow(x).cpr));
   }
 }
 
@@ -2092,7 +2136,8 @@ function getMarketingKpis() {
   const leads = sum(state.marketing, "leads");
   const impressions = sum(state.marketing, "impressions");
   const clicks = sum(state.marketing, "clicks");
-  return { spend, leads, qualified: sum(state.marketing, "qualified"), impressions, ctr: safeDiv(clicks, impressions), cpc: safeDiv(spend, clicks), cpl: safeDiv(spend, leads), chat: clicks };
+  const chats = sum(state.marketing, "whatsappChats") || clicks;
+  return { spend, leads, qualified: sum(state.marketing, "qualified"), impressions, ctr: safeDiv(clicks, impressions), cpc: safeDiv(spend, clicks), cpr: safeDiv(spend, leads || chats), chat: chats };
 }
 function getContentKpis() {
   const posted = state.content.filter(x => x.status === "Posted").length;
@@ -2290,7 +2335,7 @@ function exportTitle(dataset) {
 
 function formatExportValue(key, value) {
   if (value === undefined || value === null) return "";
-  if (["revenue", "spend", "adSpend", "otherExpense", "productSalePrice", "patientTreatmentPrice", "dailyTarget", "dailyRevenue", "monthlyTarget", "totalRevenue", "teamBonus", "cpc", "cpl", "upsales"].includes(key)) return money(num(value));
+  if (["revenue", "spend", "adSpend", "otherExpense", "productSalePrice", "patientTreatmentPrice", "dailyTarget", "dailyRevenue", "monthlyTarget", "totalRevenue", "teamBonus", "cpc", "cpl", "cpr", "upsales"].includes(key)) return money(num(value));
   if (key === "ctr") return pct(num(value));
   if (key === "roas") return `${num(value).toFixed(1)}x`;
   if (key === "mediaLinks") return String(value).split(/\n|,\s*/).map(x => x.trim()).filter(Boolean).join(" | ");
@@ -2415,6 +2460,10 @@ function topText(rows, key) {
 function safeDiv(a, b) { return b ? num(a) / num(b) : 0; }
 function sum(rows, key) { return rows.reduce((total, row) => total + num(row[key]), 0); }
 function num(value) { return Number(value) || 0; }
+function normalizeRateInput(value) {
+  const rate = num(value);
+  return rate > 1 ? rate / 100 : rate;
+}
 function pct(value) { return `${(num(value) * 100).toFixed(1)}%`; }
 function money(value) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num(value)); }
 function formatNumber(value) { return new Intl.NumberFormat("id-ID").format(num(value)); }
@@ -2430,6 +2479,7 @@ function compactMoney(value) {
 function nextId(prefix, number) { return `${prefix}-${number}`; }
 function label(key, dataset = "") {
   if (key === "userName") return userNameLabel(dataset);
+  if (dataset === "marketing" && key === "name") return "Campaign Name";
   const labels = {
     date: "Tanggal",
     managerName: "Nama Manager",
@@ -2455,10 +2505,19 @@ function label(key, dataset = "") {
     followUp: "Follow Up",
     bottleneck: "Evaluasi/Bottleneck",
     ownerNote: "Catatan Owner",
-    spend: "Spend",
+    spend: "Budget/Spend",
+    reach: "Jangkauan",
     impressions: "Impression",
-    clicks: "Click",
-    qualified: "Qualified",
+    ctr: "CTR (Click-Through Rate)",
+    cpc: "CPC (Cost Per Click)",
+    clicks: "Link Click",
+    whatsappChats: "Chat Whatsapp",
+    cpr: "CPR (Cost Per Result)",
+    frequency: "Frequency",
+    leads: "Leads Masuk",
+    qualified: "Qualified Leads",
+    roas: "ROAS",
+    adSetSetting: "Setting Ad Set",
     finalStock: "Stok Akhir",
     stockStatus: "Status Stok",
     inQty: "Stock In",
