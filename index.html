@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.18">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.19">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -681,7 +681,7 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-30-crm-status-upselling-layout";
+const SETTINGS_REVISION = "2026-06-30-dynamic-spreadsheet-columns";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -728,6 +728,7 @@ let autoSyncPaused = false;
 let searchRenderTimer = null;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
+const DATASET_KEYS = ["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"];
 const EDITABLE_REPORT_FIELDS = {
   manager: ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
   marketing: ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"],
@@ -740,6 +741,8 @@ const EDITABLE_REPORT_FIELDS = {
 const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired"]);
 const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling"]);
+const INTERNAL_FIELDS = new Set(["__index"]);
+const COMPUTED_FIELDS = new Set(["finalStock","stockStatus","cpl","cpc","cpr","ctr","frequency","roas"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
   beforeDatasetDraw(chart) {
@@ -789,6 +792,7 @@ function init() {
 function defaultState() {
   return {
     session: { role: "Owner", authenticated: false },
+    backendColumns: {},
     settings: {
       brandName: DEFAULT_DASHBOARD_NAME,
       primaryColor: DEFAULT_PRIMARY_COLOR,
@@ -918,6 +922,7 @@ function migrateTreatmentNames(targetState) {
 }
 
 function normalizeDashboardState(targetState) {
+  targetState.backendColumns = normalizeBackendColumns(targetState.backendColumns || targetState.columns || targetState.headers || {});
   targetState.settings = {
     ...defaultState().settings,
     ...(targetState.settings || {}),
@@ -935,6 +940,30 @@ function normalizeDashboardState(targetState) {
   migrateCrmRows(targetState);
   migrateDivisionRows(targetState);
   migrateMedicalRows(targetState);
+}
+
+function normalizeBackendColumns(columns) {
+  return DATASET_KEYS.reduce((acc, dataset) => {
+    const list = columns?.[dataset];
+    acc[dataset] = Array.isArray(list) ? list.map(String).filter(Boolean) : [];
+    return acc;
+  }, {});
+}
+
+function getBackendColumns(dataset) {
+  return state.backendColumns?.[dataset] || [];
+}
+
+function collectAllDatasetColumns() {
+  return DATASET_KEYS.reduce((acc, dataset) => {
+    acc[dataset] = resolveTableColumns(dataset, state[dataset] || [], (state[dataset] || []).map(row => normalizeRow(row)), EDITABLE_REPORT_FIELDS[dataset] || []);
+    return acc;
+  }, {});
+}
+
+function mergeFetchedColumnMetadata(result) {
+  const fetchedColumns = result.columns || result.headers || result.data?.columns || result.data?.headers || {};
+  state.backendColumns = normalizeBackendColumns(fetchedColumns);
 }
 
 function migrateCampaignNames(targetState) {
@@ -1719,7 +1748,7 @@ function reportSummaryCard(title, dataset, rows, columns) {
 }
 
 function getFilteredReportRows() {
-  return ["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"].reduce((acc, dataset) => {
+  return DATASET_KEYS.reduce((acc, dataset) => {
     acc[dataset] = filterRowsByDate(state[dataset] || []);
     return acc;
   }, {});
@@ -1818,7 +1847,9 @@ function formCard(id, title, section, fields) {
 }
 
 function tableCard(title, dataset, rows, columns) {
-  const dataRows = rows.map(row => normalizeRow(row));
+  const rawRows = rows.map(row => ({ ...row }));
+  const dataRows = rawRows.map(row => normalizeRow(row));
+  const tableColumns = resolveTableColumns(dataset, rawRows, dataRows, columns);
   const showActions = canManageDataset(dataset);
   const exportDataset = tableExportDataset(dataset);
   return `<div class="table-card">
@@ -1826,10 +1857,40 @@ function tableCard(title, dataset, rows, columns) {
       <div><h2>${title}</h2><p>${dataRows.length} data tampil</p></div>
       ${exportActions(exportDataset)}
     </div>
-    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${columns.map(col => `<th>${label(col, dataset)}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
-      ${dataRows.map((row, index) => `<tr>${columns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><div class="action-buttons"><button class="ghost-button" data-edit="${dataset}" data-index="${row.__index}">Edit</button><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></div></td>` : ""}</tr>`).join("")}
+    ${dataRows.length ? `<div class="table-wrap"><table><thead><tr>${tableColumns.map(col => `<th>${escapeHtml(label(col, dataset))}</th>`).join("")}${showActions ? "<th>Aksi</th>" : ""}</tr></thead><tbody>
+      ${dataRows.map((row, index) => `<tr>${tableColumns.map(col => tableCell(dataset, row, col, index)).join("")}${showActions ? `<td><div class="action-buttons"><button class="ghost-button" data-edit="${dataset}" data-index="${row.__index}">Edit</button><button class="ghost-button" data-delete="${dataset}" data-index="${row.__index}">Hapus</button></div></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state">Belum ada data untuk filter ini.</div>`}
   </div>`;
+}
+
+function resolveTableColumns(dataset, rawRows, dataRows, defaultColumns = []) {
+  const rowKeys = collectRowKeys(rawRows);
+  getBackendColumns(dataset).forEach(key => {
+    if (!rowKeys.includes(key)) rowKeys.push(key);
+  });
+  if (!rawRows.length) return rowKeys.length ? rowKeys : defaultColumns;
+  const columns = [];
+  defaultColumns.forEach(col => {
+    if (rowKeys.includes(col) || shouldKeepDefaultColumn(dataset, col, dataRows)) columns.push(col);
+  });
+  rowKeys.forEach(col => {
+    if (!columns.includes(col) && !INTERNAL_FIELDS.has(col) && !COMPUTED_FIELDS.has(col)) columns.push(col);
+  });
+  return columns;
+}
+
+function shouldKeepDefaultColumn(dataset, col, rows) {
+  if (["ownerNote", "mediaLinks"].includes(col)) return true;
+  if (dataset === "inventory" && ["finalStock", "stockStatus"].includes(col)) return true;
+  return rows.some(row => row[col] !== undefined && row[col] !== "");
+}
+
+function collectRowKeys(rows) {
+  const keys = [];
+  rows.forEach(row => Object.keys(row || {}).forEach(key => {
+    if (!INTERNAL_FIELDS.has(key) && !keys.includes(key)) keys.push(key);
+  }));
+  return keys;
 }
 
 function tableExportDataset(dataset) {
@@ -1953,7 +2014,7 @@ function openEditReport(dataset, index) {
   if (!canManageDataset(dataset)) return toast("Hanya Owner yang bisa edit laporan tersebut.");
   const row = state[dataset]?.[index];
   if (!row) return toast("Data laporan tidak ditemukan.");
-  const fields = EDITABLE_REPORT_FIELDS[dataset] || Object.keys(row).filter(key => key !== "__index");
+  const fields = resolveEditableFields(dataset, row);
   const modal = ensureEditReportModal();
   modal.innerHTML = `<form method="dialog" class="form-card" id="editReportForm">
     <div>
@@ -1995,14 +2056,24 @@ function ensureEditReportModal() {
   return modal;
 }
 
+function resolveEditableFields(dataset, row) {
+  const rowKeys = Object.keys(row || {}).filter(key => !INTERNAL_FIELDS.has(key));
+  const baseFields = (EDITABLE_REPORT_FIELDS[dataset] || []).filter(field => rowKeys.includes(field) || field === "ownerNote");
+  rowKeys.forEach(field => {
+    if (!baseFields.includes(field) && !COMPUTED_FIELDS.has(field)) baseFields.push(field);
+  });
+  return baseFields;
+}
+
 function editReportField(field, value, dataset = "") {
   const safeValue = field === "ownerNote" ? ownerNoteValue(value) : String(value ?? "");
   const maxLength = field === "ownerNote" ? ` maxlength="${OWNER_NOTE_MAX_LENGTH}"` : "";
+  const safeName = escapeHtml(field);
   if (TEXTAREA_REPORT_FIELDS.has(field)) {
-    return `<label>${label(field, dataset)}<textarea name="${field}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
+    return `<label>${escapeHtml(label(field, dataset))}<textarea name="${safeName}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
   }
   const type = DATE_REPORT_FIELDS.has(field) ? "date" : NUMERIC_REPORT_FIELDS.has(field) ? "number" : "text";
-  return `<label>${label(field, dataset)}<input name="${field}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
+  return `<label>${escapeHtml(label(field, dataset))}<input name="${safeName}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
 }
 
 function normalizeEditValue(field, value) {
@@ -2210,9 +2281,9 @@ function kanban() {
 function exportCsv(dataset) {
   const csv = getExportSections(dataset).map(section => {
     if (!section.rows.length) return "";
-    const headers = section.headers.length ? section.headers : Object.keys(section.rows[0]).filter(x => x !== "__index");
+    const headers = section.headers.length ? section.headers : collectRowKeys(section.rows);
     const lines = section.rows.map(row => headers.map(key => csvCell(formatExportValue(key, row[key]))).join(","));
-    return [`# ${section.title}`, headers.map(label).join(","), ...lines].join("\n");
+    return [`# ${section.title}`, headers.map(key => csvCell(label(key, section.dataset))).join(","), ...lines].join("\n");
   }).filter(Boolean).join("\n\n");
   if (!csv) return toast("Belum ada data untuk diexport.");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -2301,11 +2372,11 @@ function exportPdf(dataset) {
 
 function getExportSections(dataset) {
   if (dataset === "owner") return getOwnerExportSections();
-  const keys = dataset === "all" ? ["manager", "marketing", "content", "crm", "doctor", "medis", "inventory"] : [dataset];
+  const keys = dataset === "all" ? DATASET_KEYS : [dataset];
   return keys.map(key => {
     const sourceRows = activePage === "reports" ? filterRowsByDate(state[key] || []) : (state[key] || []);
     const rows = sourceRows.map(normalizeRow);
-    const headers = rows.length ? Object.keys(rows[0]).filter(x => x !== "__index") : [];
+    const headers = rows.length ? collectRowKeys(rows) : [];
     return { title: exportTitle(key), dataset: key, headers, rows };
   });
 }
@@ -2407,6 +2478,7 @@ async function syncToGoogleSheets(options = {}) {
       body: JSON.stringify({
         action: "sync",
         token: backend.token,
+        columns: collectAllDatasetColumns(),
         data: {
           manager: state.manager,
           crm: state.crm,
@@ -2453,6 +2525,8 @@ async function fetchFromGoogleSheets() {
       session: state.session
     };
     normalizeDashboardState(state);
+    mergeFetchedColumnMetadata(result);
+    mergeFetchedColumnMetadata(result);
     delete state.settings.backendUrl;
     delete state.settings.backendToken;
     state.settingsRevision = SETTINGS_REVISION;
@@ -2582,6 +2656,7 @@ function label(key, dataset = "") {
     nurseBeautician: "Suster/Beautician",
     mediaLinks: "Upload Foto/Video"
   };
+  if (String(key).match(/[\s/()-]/)) return String(key);
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, x => x.toUpperCase());
 }
 function mediaLinks(value) {
