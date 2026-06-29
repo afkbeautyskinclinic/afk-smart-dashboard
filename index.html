@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.20">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.21">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -681,7 +681,9 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
-const SETTINGS_REVISION = "2026-06-30-backend-first-refresh";
+const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
+const AUTH_SESSION_DAYS = 30;
+const SETTINGS_REVISION = "2026-06-30-persistent-login";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -785,8 +787,8 @@ async function init() {
   initInstallExperience();
   registerServiceWorker();
   renderAll();
-  if (!state.session.authenticated) openLogin(currentRole);
   await refreshFromBackendOnStart();
+  if (!state.session.authenticated) openLogin(currentRole);
   initAutoSync();
 }
 
@@ -869,10 +871,15 @@ function stock(date, userName, id, name, category, unit, supplier, initial, inQt
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return defaultState();
+  if (!saved) {
+    const initialState = defaultState();
+    applySavedAuthSession(initialState);
+    return initialState;
+  }
   try {
     const loadedState = { ...defaultState(), ...JSON.parse(saved) };
     normalizeDashboardState(loadedState);
+    applySavedAuthSession(loadedState);
     if (loadedState.settingsRevision !== SETTINGS_REVISION) {
       loadedState.settingsRevision = SETTINGS_REVISION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedState));
@@ -886,6 +893,32 @@ function loadState() {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   scheduleAutoSync();
+}
+
+function loadAuthSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || "null");
+    if (!session || !session.authenticated || !session.role || !session.expiresAt) return null;
+    if (Date.now() > Number(session.expiresAt)) {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+      return null;
+    }
+    return { role: normalizeRoleName(session.role), authenticated: true, expiresAt: Number(session.expiresAt) };
+  } catch {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    return null;
+  }
+}
+
+function saveAuthSession(role) {
+  const expiresAt = Date.now() + AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000;
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ role: normalizeRoleName(role), authenticated: true, expiresAt }));
+}
+
+function applySavedAuthSession(targetState) {
+  const session = loadAuthSession();
+  if (!session) return;
+  targetState.session = { role: session.role, authenticated: true };
 }
 
 function initAutoSync() {
@@ -1165,6 +1198,7 @@ function handleLogin(event) {
   }
   currentRole = role;
   state.session = { role, authenticated: true };
+  saveAuthSession(role);
   activePage = role === "Owner" ? "owner" : rolePage(role);
   els.roleSelect.value = role;
   saveState();
