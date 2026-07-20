@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.21">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.23">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -249,6 +249,14 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
 .kanban-item { padding: 10px; border-radius: var(--radius); background: #fff8fc; border: 1px solid var(--line); margin-bottom: 8px; }
 .alert-list { display: grid; gap: 10px; }
 .alert-item { display: flex; justify-content: space-between; gap: 12px; padding: 12px; border-radius: var(--radius); background: #fff8fc; border: 1px solid var(--line); }
+.integrated-owner { display: grid; gap: 14px; margin-top: 16px; }
+.integrated-owner .section-head { margin-bottom: 0; }
+.integrated-owner .table-card h3 { margin-top: 0; }
+.control-alerts { display: grid; gap: 10px; }
+.control-alert { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fffafd; }
+.control-alert strong { font-size: 14px; }
+.control-alert p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.control-alert .alert-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .toast {
   position: fixed;
   right: 22px;
@@ -683,7 +691,7 @@ const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
 const AUTH_SESSION_DAYS = 30;
-const SETTINGS_REVISION = "2026-06-30-persistent-login";
+const SETTINGS_REVISION = "2026-07-18-integrated-owner-dashboard";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
@@ -1302,6 +1310,7 @@ function renderOwner() {
       ${kpi("Top Campaign", topBy(state.marketing, "revenue", "name"))}
       ${kpi("Top Treatment", topText(state.medis, "treatmentName"))}
     </div>
+    ${renderIntegratedOwnerDashboard()}
     <div class="two-col">
       ${chartCard("Funnel Klinik", "funnelChart")}
       ${chartCard("Revenue Mingguan", "revenueChart")}
@@ -1315,6 +1324,40 @@ function renderOwner() {
         </div>
       </div>
     </div>`;
+}
+
+function renderIntegratedOwnerDashboard() {
+  const metrics = getIntegratedOwnerMetrics();
+  const reconciliationRows = getIntegratedOwnerControlRows();
+  const decisionAlerts = getIntegratedOwnerDecisionAlerts();
+  return `<section class="integrated-owner">
+    ${sectionHead("Integrated Owner Dashboard AFK", "Pusat kontrol lintas-divisi untuk membandingkan angka, mendeteksi data kosong, keterlambatan input, patient journey terputus, complaint, risiko revenue, dan handover yang belum selesai.")}
+    <div class="kpi-grid">
+      ${kpi("Data Kosong", metrics.blankData)}
+      ${kpi("Input Terlambat", metrics.lateInput)}
+      ${kpi("Mismatch Antar-Divisi", metrics.mismatch)}
+      ${kpi("Journey Terputus", metrics.brokenJourney)}
+      ${kpi("Follow-up Lalai", metrics.overdueFollowUp)}
+      ${kpi("Complaint / Red Flag", metrics.redFlag)}
+      ${kpi("Revenue Gap", compactMoney(metrics.revenueGap))}
+      ${kpi("Aftercare Missing", metrics.aftercareMissing)}
+    </div>
+    ${tableCard("Cross-Division Reconciliation", "integratedOwner", reconciliationRows, ["area","sourceA","valueA","sourceB","valueB","gap","status","action"])}
+    <div class="table-card">
+      <div class="section-head"><div><h2>Decision Alerts</h2><p>Alert prioritas untuk Owner dan Manager berdasarkan koneksi data antar dashboard.</p></div></div>
+      <div class="control-alerts">
+        ${decisionAlerts.map(alert => `<article class="control-alert">
+          <div class="alert-meta">
+            <span class="badge ${alert.severityClass}">${escapeHtml(alert.severity)}</span>
+            <span class="badge ${alert.statusClass}">${escapeHtml(alert.status)}</span>
+          </div>
+          <strong>${escapeHtml(alert.title)}</strong>
+          <p>${escapeHtml(alert.detail)}</p>
+          <p><strong>Tindakan:</strong> ${escapeHtml(alert.action)}</p>
+        </article>`).join("") || `<div class="empty-state">Tidak ada alert prioritas saat ini.</div>`}
+      </div>
+    </div>
+  </section>`;
 }
 
 function renderManager() {
@@ -2421,14 +2464,176 @@ function getExportSections(dataset) {
   });
 }
 
+function getIntegratedOwnerMetrics() {
+  const rows = getIntegratedOwnerControlRows();
+  const alerts = getIntegratedOwnerDecisionAlerts();
+  return {
+    blankData: countBlankCriticalFields(),
+    lateInput: getLateInputDivisions().length,
+    mismatch: rows.filter(row => row.status !== "Selaras").length,
+    brokenJourney: countBrokenPatientJourneys(),
+    overdueFollowUp: getOverdueFollowUps().length,
+    redFlag: getComplaintRows().length,
+    revenueGap: Math.abs(getRevenueAlignment().gap),
+    aftercareMissing: getAftercareMissingRows().length
+  };
+}
+
+function getIntegratedOwnerControlRows() {
+  const crmBooking = state.crm.filter(row => ["Booking", "Show Up", "Treatment"].includes(row.responseLead)).length;
+  const crmShowUp = state.crm.filter(row => ["Show Up", "Treatment"].includes(row.responseLead)).length;
+  const crmTreatment = state.crm.filter(row => row.responseLead === "Treatment").length;
+  const doctorDone = state.doctor.filter(row => isTreatmentDone(row.status)).length;
+  const medisDone = state.medis.filter(row => isTreatmentDone(row.status)).length;
+  const marketingBooking = sum(state.marketing, "booking");
+  const marketingShowUp = sum(state.marketing, "showUp");
+  const marketingTreatment = sum(state.marketing, "treatment");
+  const revenue = getRevenueAlignment();
+  return [
+    integratedRow("Lead masuk", "Marketing", sum(state.marketing, "leads"), "CRM", state.crm.length, "Cek apakah semua lead iklan masuk CRM"),
+    integratedRow("Qualified lead", "Marketing", sum(state.marketing, "qualified"), "CRM", state.crm.filter(row => ["Konsultasi", "Booking", "Show Up", "Treatment"].includes(row.responseLead)).length, "Samakan definisi qualified lead"),
+    integratedRow("Booking", "Marketing", marketingBooking, "CRM", crmBooking, "Validasi lead booking yang belum dibuat follow-up CRM"),
+    integratedRow("Show Up", "Marketing", marketingShowUp, "CRM", crmShowUp, "Cek booking no show dan laporan kedatangan"),
+    integratedRow("Treatment", "CRM", crmTreatment, "Dokter", doctorDone, "Cek pasien treatment yang belum masuk laporan dokter"),
+    integratedRow("Treatment Handover", "Dokter", doctorDone, "Tim Medis", medisDone, "Pastikan tindakan dokter sudah dihandover ke tim medis"),
+    integratedRow("Aftercare", "Treatment Selesai", medisDone, "Aftercare Terisi", medisDone - getAftercareMissingRows().length, "Lengkapi catatan aftercare pasien"),
+    integratedRow("Revenue", "Manager", revenue.managerRevenue, "CRM + Marketing + Medis", revenue.operationalRevenue, "Rekonsiliasi revenue operasional dengan laporan manager")
+  ];
+}
+
+function integratedRow(area, sourceA, valueA, sourceB, valueB, action) {
+  const gap = num(valueA) - num(valueB);
+  const status = Math.abs(gap) <= integratedTolerance(area, valueA, valueB) ? "Selaras" : "Perlu Cek";
+  return {
+    area,
+    sourceA,
+    valueA: formatIntegratedValue(area, valueA),
+    sourceB,
+    valueB: formatIntegratedValue(area, valueB),
+    gap: formatIntegratedValue(area, gap),
+    status,
+    action
+  };
+}
+
+function integratedTolerance(area, valueA, valueB) {
+  if (area === "Revenue") return Math.max(500000, Math.max(Math.abs(num(valueA)), Math.abs(num(valueB))) * 0.05);
+  return 0;
+}
+
+function formatIntegratedValue(area, value) {
+  return area === "Revenue" ? compactMoney(value) : formatNumber(value);
+}
+
+function getIntegratedOwnerDecisionAlerts() {
+  const rows = [];
+  const lateInputs = getLateInputDivisions();
+  const blankFields = countBlankCriticalFields();
+  const brokenJourney = countBrokenPatientJourneys();
+  const overdueFollowUps = getOverdueFollowUps();
+  const complaintRows = getComplaintRows();
+  const aftercareMissing = getAftercareMissingRows();
+  const handoverMissing = getMissingHandoverRows();
+  const revenue = getRevenueAlignment();
+  const noShow = Math.max(0, state.crm.filter(row => ["Booking", "Show Up", "Treatment"].includes(row.responseLead)).length - state.crm.filter(row => ["Show Up", "Treatment"].includes(row.responseLead)).length);
+  const stockRisk = state.inventory.filter(row => stockStatus(row) !== "Aman").length;
+
+  if (blankFields) rows.push(ownerDecisionAlert("High", "Data kosong terdeteksi", `${blankFields} field penting masih kosong di laporan divisi.`, "Minta PIC divisi melengkapi data sebelum evaluasi harian."));
+  if (lateInputs.length) rows.push(ownerDecisionAlert("High", "Input divisi terlambat", `${lateInputs.join(", ")} belum memiliki input terbaru.`, "Manager follow-up PIC terkait dan cek kendala input."));
+  if (getIntegratedOwnerControlRows().some(row => row.status !== "Selaras")) rows.push(ownerDecisionAlert("High", "Angka antar-divisi tidak selaras", "Ada perbedaan angka pada lead, booking, treatment, aftercare, handover, atau revenue.", "Gunakan tabel Cross-Division Reconciliation untuk audit sumber gap."));
+  if (brokenJourney) rows.push(ownerDecisionAlert("High", "Patient journey terputus", `${brokenJourney} indikasi pasien/booking belum tersambung dari CRM ke Dokter/Tim Medis.`, "Cek nama pasien dan Booking ID di CRM, Dokter, dan Tim Medis."));
+  if (overdueFollowUps.length) rows.push(ownerDecisionAlert("High", "Kelalaian follow-up CRM", `${overdueFollowUps.length} lead melewati jadwal follow-up dan belum closing/lost.`, "CRM harus follow-up ulang dan update respon lead."));
+  if (complaintRows.length) rows.push(ownerDecisionAlert("Critical", "Complaint / red flag belum dievaluasi", `${complaintRows.length} complaint tercatat di Dokter/Tim Medis.`, "Owner/Manager pastikan complaint dieskalasi dan dicatat tindak lanjutnya."));
+  if (Math.abs(revenue.gap) > integratedTolerance("Revenue", revenue.managerRevenue, revenue.operationalRevenue)) rows.push(ownerDecisionAlert("High", "Revenue tidak selaras dengan tindakan", `Selisih revenue Manager vs operasional sebesar ${compactMoney(Math.abs(revenue.gap))}.`, "Rekonsiliasi pembayaran, treatment selesai, dan upselling/cross selling."));
+  if (noShow) rows.push(ownerDecisionAlert("Medium", "Booking belum muncul di kedatangan", `${noShow} selisih booking terhadap show up.`, "Cek alasan no show dan jadwalkan follow-up/rebooking."));
+  if (aftercareMissing.length) rows.push(ownerDecisionAlert("High", "Pasien treatment belum masuk aftercare", `${aftercareMissing.length} treatment selesai belum memiliki catatan aftercare.`, "Tim Medis lengkapi aftercare dan rekomendasi rebooking."));
+  if (handoverMissing.length) rows.push(ownerDecisionAlert("High", "Handover Dokter ke Tim Medis belum lengkap", `${handoverMissing.length} laporan dokter belum cocok dengan laporan Tim Medis.`, "Cocokkan Booking ID/nama pasien dan update laporan Tim Medis."));
+  if (stockRisk) rows.push(ownerDecisionAlert("Medium", "Risiko stok produk/alat", `${stockRisk} item inventory berstatus menipis/habis.`, "GA/Inventory lakukan reorder untuk item prioritas treatment."));
+  return rows;
+}
+
+function ownerDecisionAlert(severity, title, detail, action) {
+  const severityClass = severity === "Critical" ? "critical" : severity === "High" ? "pending" : "warm";
+  return { severity, severityClass, status: "Open", statusClass: severityClass, title, detail, action };
+}
+
+function countBlankCriticalFields() {
+  const required = {
+    manager: ["date","managerName","dailyRevenue","totalRevenue"],
+    marketing: ["date","userName","leads","booking","showUp","treatment","revenue"],
+    content: ["date","userName","title","platform","status"],
+    crm: ["date","userName","name","wa","responseLead","followUp"],
+    doctor: ["date","doctorName","patientName","bookingId","treatmentName","status"],
+    medis: ["date","userName","patientId","bookingId","treatmentName","status","aftercare"],
+    inventory: ["date","userName","name","initial","minimum"]
+  };
+  return Object.entries(required).reduce((total, [dataset, fields]) => {
+    return total + (state[dataset] || []).reduce((rowTotal, row) => rowTotal + fields.filter(field => isBlank(row[field])).length, 0);
+  }, 0);
+}
+
+function getLateInputDivisions() {
+  return DATASET_KEYS.filter(dataset => daysSinceLatestInput(dataset) > 1).map(sectionLabel);
+}
+
+function daysSinceLatestInput(dataset) {
+  const dates = (state[dataset] || []).map(row => row.date).filter(Boolean).sort();
+  if (!dates.length) return Infinity;
+  const latest = new Date(`${dates[dates.length - 1]}T00:00:00`);
+  if (Number.isNaN(latest.getTime())) return Infinity;
+  return Math.floor((startOfToday() - latest) / 86400000);
+}
+
+function countBrokenPatientJourneys() {
+  const doctorKeys = new Set(state.doctor.map(patientJourneyKey).filter(Boolean));
+  const medisKeys = new Set(state.medis.map(patientJourneyKey).filter(Boolean));
+  const crmTreatmentMissing = state.crm.filter(row => row.responseLead === "Treatment" && !doctorKeys.has(patientJourneyKey(row)) && !medisKeys.has(patientJourneyKey(row))).length;
+  return crmTreatmentMissing + getMissingHandoverRows().length;
+}
+
+function getMissingHandoverRows() {
+  const medisKeys = new Set(state.medis.map(patientJourneyKey).filter(Boolean));
+  return state.doctor.filter(row => isTreatmentDone(row.status) && !medisKeys.has(patientJourneyKey(row)));
+}
+
+function getAftercareMissingRows() {
+  return state.medis.filter(row => isTreatmentDone(row.status) && isBlank(row.aftercare));
+}
+
+function getOverdueFollowUps() {
+  const today = startOfToday();
+  return state.crm.filter(row => {
+    if (!row.followUp || ["Treatment", "Lost"].includes(row.responseLead)) return false;
+    const followUpDate = new Date(`${row.followUp}T00:00:00`);
+    return !Number.isNaN(followUpDate.getTime()) && followUpDate < today;
+  });
+}
+
+function getComplaintRows() {
+  return [...state.doctor, ...state.medis].filter(row => !isBlank(row.complaint) || String(row.bottleneck || "").toLowerCase().includes("complaint"));
+}
+
+function getRevenueAlignment() {
+  const managerRevenue = sum(state.manager, "dailyRevenue");
+  const operationalRevenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales");
+  return { managerRevenue, operationalRevenue, gap: managerRevenue - operationalRevenue };
+}
+
+function patientJourneyKey(row) {
+  return normalizeSearchText(row.bookingId || row.patientName || row.patientId || row.name || "");
+}
+
 function getOwnerAlerts() {
   const k = getKpis();
+  const integrated = getIntegratedOwnerMetrics();
   return [
     ["Lead belum difollow up", state.crm.filter(x => new Date(x.followUp) <= new Date() && !["Treatment", "Lost"].includes(x.responseLead)).length],
     ["Booking no show", Math.max(0, k.booking - k.showUp)],
     ["Stok menipis", state.inventory.filter(x => stockStatus(x) !== "Aman").length],
     ["Konten belum publish", state.content.filter(x => x.status !== "Posted").length],
-    ["Laporan divisi belum masuk", 1]
+    ["Laporan divisi belum masuk", integrated.lateInput],
+    ["Mismatch antar-divisi", integrated.mismatch],
+    ["Patient journey terputus", integrated.brokenJourney]
   ];
 }
 
@@ -2457,6 +2662,17 @@ function getOwnerExportSections() {
       title: "Tabel Alert",
       headers: ["alert", "total"],
       rows: getOwnerAlerts().map(([alert, total]) => ({ alert, total }))
+    },
+    {
+      title: "Integrated Owner Dashboard AFK",
+      dataset: "integratedOwner",
+      headers: ["area","sourceA","valueA","sourceB","valueB","gap","status","action"],
+      rows: getIntegratedOwnerControlRows()
+    },
+    {
+      title: "Decision Alerts",
+      headers: ["severity","status","title","detail","action"],
+      rows: getIntegratedOwnerDecisionAlerts()
     },
     {
       title: "Leads Berdasarkan Source",
@@ -2607,6 +2823,12 @@ function searchRows(rows, keys) {
 function normalizeSearchText(value) {
   return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
+function isBlank(value) { return value === undefined || value === null || String(value).trim() === ""; }
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
 function finalStock(row) { return num(row.initial) + num(row.inQty) - num(row.outQty); }
 function stockStatus(row) { const final = finalStock(row); return final <= 0 ? "Habis" : final <= num(row.minimum) ? "Menipis" : "Aman"; }
 function expiringSoon(row) { return row.expired && (new Date(row.expired) - new Date()) / 86400000 < 120; }
@@ -2694,7 +2916,17 @@ function label(key, dataset = "") {
     bookingId: "Booking ID",
     publishDate: "Publish Date",
     nurseBeautician: "Suster/Beautician",
-    mediaLinks: "Upload Foto/Video"
+    mediaLinks: "Upload Foto/Video",
+    area: "Area Kontrol",
+    sourceA: "Sumber Data A",
+    valueA: "Nilai A",
+    sourceB: "Sumber Data B",
+    valueB: "Nilai B",
+    gap: "Selisih",
+    action: "Tindakan",
+    severity: "Prioritas",
+    title: "Judul Alert",
+    detail: "Detail"
   };
   if (String(key).match(/[\s/()-]/)) return String(key);
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, x => x.toUpperCase());
@@ -2748,6 +2980,7 @@ function applyBrandSettings() {
 </script>
 </body>
 </html>
+
 
 
 
