@@ -1,8 +1,8 @@
-﻿const CACHE_NAME = "afk-dashboard-v1.5.25";
+const CACHE_NAME = "afk-dashboard-v1.5.26";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=1.5.25",
+  "./manifest.webmanifest?v=1.5.26",
   "./assets/logo-afk.png",
   "./assets/icon-192.png",
   "./assets/icon-512.png"
@@ -36,6 +36,3 @@ self.addEventListener("fetch", event => {
       .catch(() => caches.match(event.request).then(cached => cached || caches.match("./index.html")))
   );
 });
-
-
-
