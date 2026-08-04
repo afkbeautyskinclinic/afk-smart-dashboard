@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8">
@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AFK Growth">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="manifest" href="manifest.webmanifest?v=1.5.25">
+  <link rel="manifest" href="manifest.webmanifest?v=1.5.22">
   <link rel="icon" href="assets/logo-afk.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <style>
@@ -284,8 +284,6 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
 .login-modal form { padding: 24px; display: grid; gap: 12px; }
 .login-modal img { width: 80px; justify-self: center; }
 .login-modal h2, .login-modal p { margin: 0; text-align: center; }
-.login-field { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
-.login-field select { width: 100%; border: 1px solid var(--line); border-radius: 12px; min-height: 44px; padding: 0 12px; background: rgba(255,255,255,.92); color: var(--ink); font: inherit; }
 .modal-actions { display: flex; justify-content: end; gap: 10px; }
 .edit-report-modal { max-width: 980px; width: calc(100% - 32px); }
 .edit-report-modal form { max-height: calc(100vh - 48px); overflow: auto; }
@@ -672,22 +670,9 @@ tbody tr:hover {
   <dialog class="login-modal" id="loginModal">
     <form method="dialog" id="loginForm">
       <img src="assets/logo-afk.png" alt="">
-      <h2>Masuk ke Dashboard</h2>
-      <p>Pilih divisi, lalu masukkan password sesuai akses masing-masing.</p>
-      <label class="login-field">Divisi
-        <select id="loginRoleSelect" aria-label="Pilih divisi login" required>
-          <option value="" selected disabled>Pilih divisi</option>
-          <option>Owner</option>
-          <option>Manager</option>
-          <option>CRM</option>
-          <option>Digital Marketing</option>
-          <option>Creative Performance</option>
-          <option>Dokter</option>
-          <option>Medis</option>
-          <option>Inventory</option>
-        </select>
-      </label>
-      <input id="passwordInput" type="password" placeholder="Password divisi" autocomplete="current-password" required>
+      <h2>Masuk sebagai <span id="loginRoleName">Owner</span></h2>
+      <p>Gunakan password demo role untuk membuka akses dashboard.</p>
+      <input id="passwordInput" type="password" placeholder="Password role" autocomplete="current-password" required>
       <div class="modal-actions">
         <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
         <button class="primary-button" value="default">Masuk</button>
@@ -698,7 +683,7 @@ tbody tr:hover {
 
   <script>
 const CONFIG = {
-  GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbyqTQak5421XtBoCX4LLlZJC8IGCoC5CNs5RbVM7Y-xa2bigLLzkeY5YwYSZXVC5eC7/exec",
+  GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxXHnrGL7pFezEXAfa42bqKwVPt5CLKtZXJFPNXg7hrNpdoi27J0lHFCdUGCXK1WqG8/exec",
   GOOGLE_APPS_SCRIPT_TOKEN: "839be6bf-ea86-43bc-93b4-97ce4edd4c0a-e66327aa-c9ac-43b6-91b4-349335bd5b85"
 };
 
@@ -742,7 +727,7 @@ const NAV = [
 ];
 
 let state = loadState();
-let currentRole = normalizeRoleName(state.session.role || "CRM");
+let currentRole = normalizeRoleName(state.session.role || "Owner");
 let activePage = currentRole === "Owner" ? "owner" : rolePage(currentRole);
 let reportFilters = { start: "", end: "", division: "all" };
 let charts = {};
@@ -794,7 +779,6 @@ const els = {
   loginModal: document.getElementById("loginModal"),
   loginForm: document.getElementById("loginForm"),
   loginRoleName: document.getElementById("loginRoleName"),
-  loginRoleSelect: document.getElementById("loginRoleSelect"),
   passwordInput: document.getElementById("passwordInput"),
   cancelLogin: document.getElementById("cancelLogin"),
   menuToggle: document.getElementById("menuToggle"),
@@ -805,9 +789,6 @@ const els = {
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
-  resetSessionForFreshLogin(state);
-  currentRole = "CRM";
-  activePage = rolePage(currentRole);
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
@@ -815,13 +796,13 @@ async function init() {
   registerServiceWorker();
   renderAll();
   await refreshFromBackendOnStart();
-  openLogin();
+  if (!state.session.authenticated) openLogin(currentRole);
   initAutoSync();
 }
 
 function defaultState() {
   return {
-    session: { role: "", authenticated: false },
+    session: { role: "Owner", authenticated: false },
     backendColumns: {},
     settings: {
       brandName: DEFAULT_DASHBOARD_NAME,
@@ -900,22 +881,20 @@ function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) {
     const initialState = defaultState();
-    resetSessionForFreshLogin(initialState);
+    applySavedAuthSession(initialState);
     return initialState;
   }
   try {
     const loadedState = { ...defaultState(), ...JSON.parse(saved) };
     normalizeDashboardState(loadedState);
-    resetSessionForFreshLogin(loadedState);
+    applySavedAuthSession(loadedState);
     if (loadedState.settingsRevision !== SETTINGS_REVISION) {
       loadedState.settingsRevision = SETTINGS_REVISION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedState));
     }
     return loadedState;
   } catch {
-    const initialState = defaultState();
-    resetSessionForFreshLogin(initialState);
-    return initialState;
+    return defaultState();
   }
 }
 
@@ -944,13 +923,10 @@ function saveAuthSession(role) {
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ role: normalizeRoleName(role), authenticated: true, expiresAt }));
 }
 
-function resetSessionForFreshLogin(targetState) {
-  localStorage.removeItem(AUTH_SESSION_KEY);
-  targetState.session = { role: "", authenticated: false };
-}
-
 function applySavedAuthSession(targetState) {
-  resetSessionForFreshLogin(targetState);
+  const session = loadAuthSession();
+  if (!session) return;
+  targetState.session = { role: session.role, authenticated: true };
 }
 
 function initAutoSync() {
@@ -1144,19 +1120,8 @@ function bindGlobalEvents() {
   els.roleSelect.addEventListener("change", () => openLogin(els.roleSelect.value));
   els.loginForm.addEventListener("submit", handleLogin);
   els.cancelLogin.addEventListener("click", () => {
-    if (!state.session.authenticated) {
-      toast("Silakan login sesuai divisi terlebih dahulu.");
-      els.loginRoleSelect?.focus();
-      return;
-    }
     els.roleSelect.value = currentRole;
     els.loginModal.close();
-  });
-  els.loginModal.addEventListener("cancel", event => {
-    if (!state.session.authenticated) {
-      event.preventDefault();
-      toast("Login diperlukan untuk membuka dashboard.");
-    }
   });
   els.globalSearch.addEventListener("input", scheduleSearchRender);
   els.globalSearch.addEventListener("search", scheduleSearchRender);
@@ -1225,29 +1190,23 @@ function registerServiceWorker() {
   });
 }
 
-function openLogin(role = "") {
-  const normalizedRole = role ? normalizeRoleName(role) : "";
-  if (els.loginRoleName) els.loginRoleName.textContent = normalizedRole;
-  if (els.loginRoleSelect) els.loginRoleSelect.value = PASSWORDS[normalizedRole] ? normalizedRole : "";
+function openLogin(role) {
+  els.loginRoleName.textContent = role;
   els.passwordInput.value = "";
   els.loginModal.showModal();
-  setTimeout(() => (els.loginRoleSelect?.value ? els.passwordInput : els.loginRoleSelect)?.focus(), 50);
+  setTimeout(() => els.passwordInput.focus(), 50);
 }
 
 function handleLogin(event) {
   event.preventDefault();
-  const role = normalizeRoleName(els.loginRoleSelect?.value || "");
-  if (!role || !PASSWORDS[role]) {
-    toast("Pilih divisi terlebih dahulu.");
-    return;
-  }
+  const role = normalizeRoleName(els.loginRoleName.textContent);
   if (els.passwordInput.value !== PASSWORDS[role]) {
     toast("Password role tidak sesuai.");
     return;
   }
   currentRole = role;
   state.session = { role, authenticated: true };
-  localStorage.removeItem(AUTH_SESSION_KEY);
+  saveAuthSession(role);
   activePage = role === "Owner" ? "owner" : rolePage(role);
   els.roleSelect.value = role;
   saveState();
@@ -3021,12 +2980,6 @@ function applyBrandSettings() {
 </script>
 </body>
 </html>
-
-
-
-
-
-
 
 
 
