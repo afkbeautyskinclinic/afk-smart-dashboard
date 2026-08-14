@@ -1,6 +1,6 @@
-const CACHE_NAME = "afk-dashboard-v1.5.29";
+const CACHE_NAME = "afk-dashboard-v1.5.30";
 const APP_SHELL = [
-  "./manifest.webmanifest?v=1.5.29",
+  "./manifest.webmanifest?v=1.5.30",
   "./assets/icon-192.png",
   "./assets/icon-512.png"
 ];
