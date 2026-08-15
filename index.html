@@ -3780,7 +3780,19 @@ function mediaLinks(value) {
 }
 function badgeClass(value) { return String(value).toLowerCase().replace(/\s+/g, "-"); }
 function sectionLabel(section) {
-  return { manager: "Manager Finance & Operational", managerMarketingDaily: "Manager Marketing", patientCommand: "Manager Marketing", managerDecisionLog: "Manager Marketing", ownerEscalation: "Manager Marketing", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" }[section] || section;
+  return {
+    manager: "Manager Finance & Operational",
+    managerMarketingDaily: "Manager Marketing - Daily Report",
+    patientCommand: "Manager Marketing - Patient Command Board",
+    managerDecisionLog: "Manager Marketing - Decision Log",
+    ownerEscalation: "Manager Marketing - Owner Escalation",
+    marketing: "Digital Marketing",
+    content: "Creative Performance",
+    crm: "CRM",
+    doctor: "Dokter",
+    medis: "Tim Medis",
+    inventory: "Inventory"
+  }[section] || section;
 }
 function userNameLabel(dataset) {
   return {
