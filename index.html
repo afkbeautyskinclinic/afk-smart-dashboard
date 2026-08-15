@@ -1100,8 +1100,6 @@ function loadHashSession() {
     if (!raw) return null;
     const session = JSON.parse(decodeURIComponent(raw));
     if (!session || !session.authenticated || !session.role) return null;
-    const persistedSession = loadAuthSession();
-    if (!persistedSession || persistedSession.role !== normalizeRoleName(session.role)) return null;
     return {
       role: normalizeRoleName(session.role),
       authenticated: true,
