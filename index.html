@@ -739,7 +739,9 @@ const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
 const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
+const REFRESH_RESTORE_KEY = "afkBeautyDashboard.refreshRestore.v1";
 const AUTH_SESSION_DAYS = 30;
+const REFRESH_RESTORE_WINDOW_MS = 45000;
 const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
@@ -1071,6 +1073,35 @@ function loadCurrentTabSession() {
   }
 }
 
+function loadRefreshRestoreSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(REFRESH_RESTORE_KEY) || "null");
+    localStorage.removeItem(REFRESH_RESTORE_KEY);
+    if (!session || !session.authenticated || !session.role || !session.expiresAt) return null;
+    if (Date.now() > Number(session.expiresAt)) return null;
+    const persistedSession = loadAuthSession();
+    if (!persistedSession || persistedSession.role !== normalizeRoleName(session.role)) return null;
+    return {
+      role: normalizeRoleName(session.role),
+      authenticated: true,
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role)
+    };
+  } catch {
+    localStorage.removeItem(REFRESH_RESTORE_KEY);
+    return null;
+  }
+}
+
+function saveRefreshRestoreMarker() {
+  if (!state.session.authenticated) return;
+  localStorage.setItem(REFRESH_RESTORE_KEY, JSON.stringify({
+    role: normalizeRoleName(currentRole),
+    authenticated: true,
+    activePage: isKnownPage(activePage) ? activePage : rolePage(currentRole),
+    expiresAt: Date.now() + REFRESH_RESTORE_WINDOW_MS
+  }));
+}
+
 function saveCurrentTabSession(role = currentRole, page = activePage) {
   saveAuthSession(role, page);
   const session = {
@@ -1084,7 +1115,7 @@ function saveCurrentTabSession(role = currentRole, page = activePage) {
 
 function applyCurrentTabSession(targetState) {
   const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
-  const session = isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null;
+  const session = loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
   targetState.session = session
     ? { role: session.role, authenticated: true, activePage: session.activePage }
     : { role: previousRole, authenticated: false, activePage: "" };
@@ -1329,6 +1360,8 @@ function bindGlobalEvents() {
   els.globalSearch.addEventListener("change", scheduleSearchRender);
   els.menuToggle.addEventListener("click", () => els.sidebar.classList.toggle("open"));
   document.getElementById("notifyButton").addEventListener("click", () => toast("5 alert aktif: follow up, no show, stok, konten, laporan."));
+  window.addEventListener("pagehide", saveRefreshRestoreMarker);
+  window.addEventListener("beforeunload", saveRefreshRestoreMarker);
 }
 
 function scheduleSearchRender() {
