@@ -790,7 +790,7 @@ const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "pat
 const OWNER_NOTE_MAX_LENGTH = 160;
 const DATASET_KEYS = ["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"];
 const EDITABLE_REPORT_FIELDS = {
-  manager: ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"],
+  manager: ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"],
   managerMarketingDaily: ["date","managerName","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","status","ownerNote"],
   patientCommand: ["date","patientName","caseType","sourceData","status","pic","targetDate","progress","followUpResult","urgency","ownerNote"],
   managerDecisionLog: ["date","managerName","decisionType","decision","dataBasis","assignedTo","deadline","expectedImpact","status","result","ownerNote"],
@@ -904,8 +904,8 @@ function defaultState() {
       platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
     },
     manager: [
-      managerReport("2026-06-21", "Ayu Lestari", 6100000, 1250000, "Sunscreen Aftercare", 2750000, 9250000, 13000000, 12000000, 300000000, 268000000, 1500000, ""),
-      managerReport("2026-06-22", "Ayu Lestari", 5800000, 950000, "Serum HA Skin Booster", 3400000, 11100000, 13000000, 14500000, 300000000, 282500000, 2500000, "")
+      managerReport("2026-06-21", "Ayu Lestari", 3600000000, 300000000, 12000000, 1500000, 2500000, 18000000, 9000000, 4250000, 1250000, 182500000, -21500000, "Cash in pasien stabil, pembayaran vendor dan payroll sudah terjadwal.", "Sesuai SOP", "Aman", "Aman", "Siap Pakai", "Aman", "Aman", "Aman", "", "Antrian weekend padat di ruang tindakan.", "Tambah buffer jadwal dan koordinasi tim medis.", "Evaluasi slot dokter dan terapis untuk besok.", "Medium", "Dalam Proses", ""),
+      managerReport("2026-06-22", "Ayu Lestari", 3600000000, 300000000, 14500000, 2000000, 1800000, 18000000, 8500000, 3950000, 950000, 185800000, -16700000, "Cash out payroll masih dominan, perlu kontrol biaya operasional harian.", "Perlu Perbaikan", "Menipis", "Aman", "Siap Pakai", "Aman", "Perlu Penyesuaian", "Aman", "Pasien menunggu terlalu lama saat jam ramai.", "Stok skincare aftercare mulai menipis.", "PIC inventory diminta cek stok dan reorder.", "Follow up reorder dan evaluasi SOP antrean.", "High", "Open", "")
     ],
     managerMarketingDaily: [
       managerMarketingDaily("2026-06-21", "Leli Melia", "Lead naik, revenue masih tertahan di high ticket.", "Target 60 lead / realisasi 64 lead; closing high ticket belum selesai.", "Follow-up high ticket lambat setelah konsultasi.", "PIC CRM belum punya prioritas harian untuk pasien bernilai besar.", "Prioritaskan follow-up Hot dan Vaser, pindahkan budget ke campaign ROAS tertinggi.", "CRM follow-up 8 lead Hot, creative revisi hook before-after.", "Potensi kehilangan booking besok jika konfirmasi terlambat.", "Butuh persetujuan Owner untuk tambahan promo closing Vaser.", "Open")
@@ -958,8 +958,8 @@ function defaultState() {
   };
 }
 
-function managerReport(date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks = "", ownerNote = "") {
-  return { date, managerName, adSpend, otherExpense, usedProduct, productSalePrice, patientTreatmentPrice, dailyTarget, dailyRevenue, monthlyTarget, totalRevenue, teamBonus, mediaLinks, ownerNote };
+function managerReport(date, managerName, annualBudget, monthlyBudget, cashInPatient, cashInOther, cashOutVendor, cashOutSalary, cashOutDoctorFee, cashOutOperational, cashOutOther, cashBalance, profitLoss, cashFlowNote = "", sopStatus = "Sesuai SOP", stockSkincareStatus = "Aman", stockMedicineStatus = "Aman", medicalToolStatus = "Siap Pakai", doctorScheduleStatus = "Aman", therapistScheduleStatus = "Aman", staffScheduleStatus = "Aman", patientComplaint = "", operationalIssue = "", actionTaken = "", followUpPlan = "", priority = "Medium", status = "Open", mediaLinks = "", ownerNote = "") {
+  return { date, managerName, annualBudget, monthlyBudget, cashInPatient, cashInOther, cashOutVendor, cashOutSalary, cashOutDoctorFee, cashOutOperational, cashOutOther, cashBalance, profitLoss, cashFlowNote, sopStatus, stockSkincareStatus, stockMedicineStatus, medicalToolStatus, doctorScheduleStatus, therapistScheduleStatus, staffScheduleStatus, patientComplaint, operationalIssue, actionTaken, followUpPlan, priority, status, mediaLinks, ownerNote };
 }
 function managerMarketingDaily(date, managerName, performanceSummary, targetVsActual, mainIssue, rootCause, decisionTaken, ongoingFollowUp, risk, ownerEscalationNeeded, status = "Open", ownerNote = "") {
   return { date, managerName, performanceSummary, targetVsActual, mainIssue, rootCause, decisionTaken, ongoingFollowUp, risk, ownerEscalationNeeded, status, ownerNote };
@@ -1539,51 +1539,65 @@ function renderIntegratedOwnerDashboard() {
 }
 
 function renderManager() {
-  const rows = searchRows(state.manager, ["managerName", "usedProduct"]);
+  const rows = searchRows(state.manager, ["managerName", "cashFlowNote", "patientComplaint", "operationalIssue", "actionTaken", "followUpPlan"]);
   const k = getManagerKpis();
   document.getElementById("managerPage").innerHTML = `
-    ${sectionHead("Manager Finance & Operational", "Control dashboard finance dan operasional untuk omzet, biaya, produk/obat terpakai, dan bonus target tim.")}
+    ${sectionHead("Manager Finance & Operational", "Control dashboard untuk cash flow perusahaan, anggaran, laba rugi, pembayaran, SOP pelayanan, stok, jadwal tim, dan kendala pasien.")}
     <div class="kpi-grid">
-      ${kpi("Target Harian", compactMoney(13000000))}
-      ${kpi("Revenue Harian", compactMoney(k.dailyRevenue))}
-      ${kpi("Target Bulanan", compactMoney(300000000))}
-      ${kpi("Total Omzet", compactMoney(k.totalRevenue))}
-      ${kpi("Total Biaya", compactMoney(k.totalExpense))}
-      ${kpi("Bonus Tim", compactMoney(k.teamBonus))}
+      ${kpi("Cash In", compactMoney(k.cashIn))}
+      ${kpi("Cash Out", compactMoney(k.cashOut))}
+      ${kpi("Saldo Kas", compactMoney(k.cashBalance))}
+      ${kpi("Laba / Rugi", compactMoney(k.profitLoss))}
+      ${kpi("Anggaran Bulanan", compactMoney(k.monthlyBudget))}
+      ${kpi("Outstanding Operasional", k.openOperationalIssues)}
     </div>
     ${managerForm()}
-    ${tableCard("Laporan Manager", "manager", rows, ["date","managerName","adSpend","otherExpense","usedProduct","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","mediaLinks","ownerNote"])}
+    ${tableCard("Laporan Manager Finance & Operational", "manager", rows, ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"])}
   `;
   bindForm("managerForm", addManager);
 }
 
 function managerForm() {
-  return formCard("managerForm", "Form Input Laporan Manager", "manager", [
+  return formCard("managerForm", "Form Input Manager Finance & Operational", "manager", [
     input("date", "Tanggal", "date"),
     input("managerName", "Nama Manager"),
-    input("adSpend", "Pengeluaran Biaya Iklan", "number"),
-    input("otherExpense", "Pengeluaran Lain-lain", "number"),
-    input("usedProduct", "Jenis Produk/Obat Terpakai"),
-    input("productSalePrice", "Harga Jual Produk/Obat", "number"),
-    input("patientTreatmentPrice", "Harga Treatment Pasien", "number"),
-    input("dailyTarget", "Target Omzet Harian", "number", 13000000),
-    input("dailyRevenue", "Revenue Harian", "number"),
-    input("monthlyTarget", "Target Omzet Bulanan", "number", 300000000),
-    input("totalRevenue", "Total Perolehan Omzet", "number"),
-    input("teamBonus", "Pemberian Bonus Capai Target Tim", "number"),
-    fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true)
+    input("annualBudget", "Anggaran Tahunan", "number"),
+    input("monthlyBudget", "Anggaran Bulanan", "number"),
+    input("cashInPatient", "Cash In - Pembayaran Pasien", "number"),
+    input("cashInOther", "Cash In - Sumber Lain", "number"),
+    input("cashOutVendor", "Cash Out - Pembayaran Vendor", "number"),
+    input("cashOutSalary", "Cash Out - Gaji Pegawai", "number"),
+    input("cashOutDoctorFee", "Cash Out - Fee/Gaji Dokter", "number"),
+    input("cashOutOperational", "Cash Out - Biaya Operasional", "number"),
+    input("cashOutOther", "Cash Out - Lain-lain", "number"),
+    input("cashBalance", "Saldo Kas Akhir", "number"),
+    input("profitLoss", "Laba / Rugi Periode Ini", "number"),
+    textarea("cashFlowNote", "Catatan Laba Rugi / Arus Kas"),
+    select("sopStatus", "Status SOP Pelayanan", ["Sesuai SOP", "Perlu Perbaikan", "Tidak Sesuai"]),
+    select("stockSkincareStatus", "Status Stok Skincare", ["Aman", "Menipis", "Kosong", "Perlu Order"]),
+    select("stockMedicineStatus", "Status Stok Obat", ["Aman", "Menipis", "Kosong", "Perlu Order"]),
+    select("medicalToolStatus", "Status Alat Medis", ["Siap Pakai", "Perlu Maintenance", "Rusak", "Perlu Pengadaan"]),
+    select("doctorScheduleStatus", "Status Jadwal Dokter", ["Aman", "Bentrok", "Kosong", "Perlu Penyesuaian"]),
+    select("therapistScheduleStatus", "Status Jadwal Terapis", ["Aman", "Bentrok", "Kosong", "Perlu Penyesuaian"]),
+    select("staffScheduleStatus", "Status Jadwal Staf", ["Aman", "Bentrok", "Kurang Orang", "Perlu Penyesuaian"]),
+    textarea("patientComplaint", "Kendala / Keluhan Pasien"),
+    textarea("operationalIssue", "Kendala Operasional"),
+    textarea("actionTaken", "Tindakan Yang Sudah Dilakukan"),
+    textarea("followUpPlan", "Rencana Tindak Lanjut"),
+    select("priority", "Prioritas", ["Low", "Medium", "High", "Critical"]),
+    select("status", "Status Penyelesaian", ["Open", "Dalam Proses", "Selesai", "Perlu Eskalasi Owner"]),
+    fileInput("mediaFiles", "Upload Bukti/Foto/Video", "image/*,video/*", true)
   ]);
 }
 
 async function addManager(data, fileFields = {}) {
-  ["adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus"].forEach(key => data[key] = num(data[key]));
+  ["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "manager", data);
   state.manager.unshift({ ...data, ownerNote: "" });
   saveState();
   renderAll();
-  toast(data.mediaLinks ? "Laporan manager dan media Drive berhasil ditambahkan." : "Laporan manager berhasil ditambahkan.");
+  toast(data.mediaLinks ? "Laporan Manager Finance & Operational dan media Drive berhasil ditambahkan." : "Laporan Manager Finance & Operational berhasil ditambahkan.");
 }
-
 
 function renderManagerMarketing() {
   const monitoring = getManagerMarketingMonitoring();
@@ -2698,16 +2712,18 @@ function getKpis() {
   const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "booking");
   const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "showUp");
   const treatmentCount = state.crm.filter(x => x.responseLead === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
-  const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + sum(state.manager, "dailyRevenue");
+  const managerCashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther");
+  const managerCashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther");
+  const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + (managerCashIn || sum(state.manager, "dailyRevenue"));
   const adSpend = sum(state.marketing, "spend") + sum(state.manager, "adSpend");
   const allRows = [...state.manager, ...state.marketing, ...state.crm, ...state.doctor, ...state.medis, ...state.inventory];
   const latestDate = latestIsoDate(allRows) || new Date().toISOString().slice(0, 10);
   const monthPrefix = latestDate.slice(0, 7);
   const todayRevenue = revenueOnDate(latestDate);
   const monthlyRevenue = revenueInMonth(monthPrefix);
-  const monthlyTarget = latestNumber(state.manager, "monthlyTarget") || 300000000;
+  const monthlyTarget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget") || 300000000;
   const forecastRevenue = forecastMonth(monthlyRevenue, latestDate);
-  const expenses = adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus");
+  const expenses = (managerCashOut || (adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus")));
   const todayPatients = uniquePatientCount(latestDate);
   const stockCritical = state.inventory.filter(x => stockStatus(x) !== "Aman").length;
   const repeat = state.crm.filter(x => /data base|database|repeat/i.test(`${x.status} ${x.category} ${x.responseLead}`)).length;
@@ -2751,12 +2767,16 @@ function latestNumber(rows, key) {
 }
 
 function revenueOnDate(date) {
-  return sum(state.crm.filter(x => x.date === date), "revenue") + sum(state.marketing.filter(x => x.date === date), "revenue") + sum(state.medis.filter(x => x.date === date), "upsales") + sum(state.manager.filter(x => x.date === date), "dailyRevenue");
+  const managerRows = state.manager.filter(x => x.date === date);
+  const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
+  return sum(state.crm.filter(x => x.date === date), "revenue") + sum(state.marketing.filter(x => x.date === date), "revenue") + sum(state.medis.filter(x => x.date === date), "upsales") + (managerCash || sum(managerRows, "dailyRevenue"));
 }
 
 function revenueInMonth(monthPrefix) {
   const inMonth = row => String(row.date || "").startsWith(monthPrefix);
-  return sum(state.crm.filter(inMonth), "revenue") + sum(state.marketing.filter(inMonth), "revenue") + sum(state.medis.filter(inMonth), "upsales") + sum(state.manager.filter(inMonth), "dailyRevenue");
+  const managerRows = state.manager.filter(inMonth);
+  const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
+  return sum(state.crm.filter(inMonth), "revenue") + sum(state.marketing.filter(inMonth), "revenue") + sum(state.medis.filter(inMonth), "upsales") + (managerCash || sum(managerRows, "dailyRevenue"));
 }
 
 function forecastMonth(value, isoDate) {
@@ -2796,7 +2816,13 @@ function getOwnerTopDecisions() {
   return [...pending, ...decisions].slice(0, 5);
 }
 function getManagerKpis() {
-  return { dailyRevenue: sum(state.manager, "dailyRevenue"), totalRevenue: sum(state.manager, "totalRevenue"), totalExpense: sum(state.manager, "adSpend") + sum(state.manager, "otherExpense"), teamBonus: sum(state.manager, "teamBonus") };
+  const cashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther") || sum(state.manager, "dailyRevenue");
+  const cashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther") || (sum(state.manager, "adSpend") + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"));
+  const latestBalance = latestNumber(state.manager, "cashBalance");
+  const profitLoss = sum(state.manager, "profitLoss") || (cashIn - cashOut);
+  const monthlyBudget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget") || 300000000;
+  const openOperationalIssues = state.manager.filter(row => (row.operationalIssue || row.patientComplaint) && !["Selesai", "Done"].includes(row.status)).length;
+  return { cashIn, cashOut, cashBalance: latestBalance || (cashIn - cashOut), profitLoss, monthlyBudget, openOperationalIssues, dailyRevenue: cashIn, totalRevenue: cashIn, totalExpense: cashOut, teamBonus: sum(state.manager, "teamBonus") };
 }
 function getCrmKpis() {
   const total = state.crm.length;
@@ -3349,6 +3375,31 @@ function label(key, dataset = "") {
   const labels = {
     date: "Tanggal",
     managerName: "Nama Manager",
+    annualBudget: "Anggaran Tahunan",
+    monthlyBudget: "Anggaran Bulanan",
+    cashInPatient: "Cash In - Pembayaran Pasien",
+    cashInOther: "Cash In - Sumber Lain",
+    cashOutVendor: "Cash Out - Pembayaran Vendor",
+    cashOutSalary: "Cash Out - Gaji Pegawai",
+    cashOutDoctorFee: "Cash Out - Fee/Gaji Dokter",
+    cashOutOperational: "Cash Out - Biaya Operasional",
+    cashOutOther: "Cash Out - Lain-lain",
+    cashBalance: "Saldo Kas Akhir",
+    profitLoss: "Laba / Rugi Periode Ini",
+    cashFlowNote: "Catatan Laba Rugi / Arus Kas",
+    sopStatus: "Status SOP Pelayanan",
+    stockSkincareStatus: "Status Stok Skincare",
+    stockMedicineStatus: "Status Stok Obat",
+    medicalToolStatus: "Status Alat Medis",
+    doctorScheduleStatus: "Status Jadwal Dokter",
+    therapistScheduleStatus: "Status Jadwal Terapis",
+    staffScheduleStatus: "Status Jadwal Staf",
+    patientComplaint: "Kendala / Keluhan Pasien",
+    operationalIssue: "Kendala Operasional",
+    actionTaken: "Tindakan Yang Sudah Dilakukan",
+    followUpPlan: "Rencana Tindak Lanjut",
+    priority: "Prioritas",
+
     doctorName: "Nama Dokter",
     patientName: "Nama Lengkap Pasien",
     nurseAssistant: "Suster Yang Membantu",
