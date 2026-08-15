@@ -851,6 +851,7 @@ const els = {
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
+  restoreSessionFromHash();
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
@@ -1112,6 +1113,16 @@ function loadHashSession() {
 function saveHashSession(role = currentRole, page = activePage) {
   const nextUrl = `${window.location.pathname}${window.location.search}#afkRole=${roleToken(role)}&afkPage=${isKnownPage(page) ? page : rolePage(role)}`;
   window.history.replaceState(null, "", nextUrl);
+}
+
+function restoreSessionFromHash() {
+  const session = loadHashSession();
+  if (!session) return false;
+  currentRole = session.role;
+  activePage = canAccessPageForRole(session.activePage, currentRole) ? session.activePage : rolePage(currentRole);
+  state.session = { role: currentRole, authenticated: true, activePage };
+  saveCurrentTabSession(currentRole, activePage);
+  return true;
 }
 
 function parseSimpleHash() {
