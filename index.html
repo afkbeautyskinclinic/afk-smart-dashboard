@@ -1098,7 +1098,7 @@ function loadHashSession() {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const raw = params.get(HASH_SESSION_KEY);
     if (!raw) return null;
-    const session = JSON.parse(decodeURIComponent(raw));
+    const session = JSON.parse(raw);
     if (!session || !session.authenticated || !session.role) return null;
     return {
       role: normalizeRoleName(session.role),
