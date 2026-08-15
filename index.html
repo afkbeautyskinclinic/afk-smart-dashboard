@@ -738,6 +738,7 @@ const CONFIG = {
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
+const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
 const AUTH_SESSION_DAYS = 30;
 const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
@@ -778,7 +779,7 @@ const NAV = [
 
 let state = loadState();
 let currentRole = normalizeRoleName(state.session.role || "Owner");
-let activePage = currentRole === "Owner" ? "owner" : rolePage(currentRole);
+let activePage = resolveInitialActivePage();
 let reportFilters = { start: "", end: "", division: "all" };
 let charts = {};
 let deferredInstallPrompt = null;
@@ -998,13 +999,13 @@ function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) {
     const initialState = defaultState();
-    applySavedAuthSession(initialState);
+    applyCurrentTabSession(initialState);
     return initialState;
   }
   try {
     const loadedState = { ...defaultState(), ...JSON.parse(saved) };
     normalizeDashboardState(loadedState);
-    applySavedAuthSession(loadedState);
+    applyCurrentTabSession(loadedState);
     if (loadedState.settingsRevision !== SETTINGS_REVISION) {
       loadedState.settingsRevision = SETTINGS_REVISION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedState));
@@ -1040,10 +1041,52 @@ function saveAuthSession(role) {
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ role: normalizeRoleName(role), authenticated: true, expiresAt }));
 }
 
-function applySavedAuthSession(targetState) {
-  const session = loadAuthSession();
-  if (!session) return;
-  targetState.session = { role: session.role, authenticated: true };
+function loadCurrentTabSession() {
+  try {
+    const session = JSON.parse(sessionStorage.getItem(TAB_SESSION_KEY) || "null");
+    if (!session || !session.authenticated || !session.role) return null;
+    const persistedSession = loadAuthSession();
+    if (!persistedSession || persistedSession.role !== normalizeRoleName(session.role)) {
+      sessionStorage.removeItem(TAB_SESSION_KEY);
+      return null;
+    }
+    return {
+      role: normalizeRoleName(session.role),
+      authenticated: true,
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role)
+    };
+  } catch {
+    sessionStorage.removeItem(TAB_SESSION_KEY);
+    return null;
+  }
+}
+
+function saveCurrentTabSession(role = currentRole, page = activePage) {
+  const session = {
+    role: normalizeRoleName(role),
+    authenticated: true,
+    activePage: isKnownPage(page) ? page : rolePage(role),
+    savedAt: new Date().toISOString()
+  };
+  sessionStorage.setItem(TAB_SESSION_KEY, JSON.stringify(session));
+}
+
+function applyCurrentTabSession(targetState) {
+  const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
+  const session = loadCurrentTabSession();
+  targetState.session = session
+    ? { role: session.role, authenticated: true, activePage: session.activePage }
+    : { role: previousRole, authenticated: false, activePage: "" };
+}
+
+function resolveInitialActivePage() {
+  const page = state.session.authenticated ? state.session.activePage : "";
+  if (isKnownPage(page) && canAccessPageForRole(page, currentRole)) return page;
+  return currentRole === "Owner" ? "owner" : rolePage(currentRole);
+}
+
+function isKnownPage(pageId) {
+  return NAV.some(item => item.id === pageId);
 }
 
 function initAutoSync() {
@@ -1256,7 +1299,11 @@ function bindGlobalEvents() {
     els.togglePassword.title = visible ? "Tampilkan password" : "Sembunyikan password";
   });
   els.loginForm.addEventListener("submit", handleLogin);
+  els.loginModal.addEventListener("cancel", event => {
+    if (!state.session.authenticated) event.preventDefault();
+  });
   els.cancelLogin.addEventListener("click", () => {
+    if (!state.session.authenticated) return;
     els.roleSelect.value = currentRole;
     els.loginModal.close();
   });
@@ -1329,12 +1376,14 @@ function registerServiceWorker() {
 
 function openLogin(role) {
   const selectedRole = normalizeRoleName(role);
+  const loginRequired = !state.session.authenticated;
   els.loginRoleSelect.value = selectedRole;
   els.roleSelect.value = selectedRole;
   els.passwordInput.value = "";
   els.passwordInput.type = "password";
   els.togglePassword.setAttribute("aria-label", "Tampilkan password");
   els.togglePassword.title = "Tampilkan password";
+  els.cancelLogin.style.display = loginRequired ? "none" : "";
   els.loginModal.showModal();
   setTimeout(() => els.loginRoleSelect.focus(), 50);
 }
@@ -1350,6 +1399,8 @@ function handleLogin(event) {
   state.session = { role, authenticated: true };
   saveAuthSession(role);
   activePage = role === "Owner" ? "owner" : rolePage(role);
+  state.session.activePage = activePage;
+  saveCurrentTabSession(role, activePage);
   els.roleSelect.value = role;
   saveState();
   buildNavigation();
@@ -1371,6 +1422,8 @@ function buildNavigation() {
     button.addEventListener("click", () => {
       if (button.classList.contains("disabled")) return toast("Menu ini hanya untuk Owner.");
       activePage = button.dataset.nav;
+      state.session.activePage = activePage;
+      if (state.session.authenticated) saveCurrentTabSession(currentRole, activePage);
       els.sidebar.classList.remove("open");
       renderAll();
     });
@@ -1393,14 +1446,19 @@ function isDivisionPage(pageId) {
 }
 
 function canAccessPage(pageId) {
-  if (currentRole === "Owner") return true;
-  if (isManagerRole()) {
+  return canAccessPageForRole(pageId, currentRole);
+}
+
+function canAccessPageForRole(pageId, role) {
+  const normalizedRole = normalizeRoleName(role);
+  if (normalizedRole === "Owner") return true;
+  if (isManagerRole(normalizedRole)) {
     if (pageId === "reports") return true;
-    if (currentRole === "Manager Finance & Operational" && pageId === "manager") return true;
-    if (currentRole === "Manager Marketing" && pageId === "managerMarketing") return true;
+    if (normalizedRole === "Manager Finance & Operational" && pageId === "manager") return true;
+    if (normalizedRole === "Manager Marketing" && pageId === "managerMarketing") return true;
     return isDivisionPage(pageId);
   }
-  return isDivisionPage(pageId) || pageId === rolePage(currentRole);
+  return isDivisionPage(pageId) || pageId === rolePage(normalizedRole);
 }
 
 function canViewDataset(dataset) {
@@ -1470,6 +1528,8 @@ function renderShell() {
 }
 function renderActivePage() {
   if (!canAccessPage(activePage)) activePage = rolePage(currentRole);
+  state.session.activePage = activePage;
+  if (state.session.authenticated) saveCurrentTabSession(currentRole, activePage);
   document.querySelectorAll(".page-panel").forEach(panel => panel.classList.remove("active"));
   const page = NAV.find(item => item.id === activePage) || NAV.find(item => item.id === "crm");
   document.getElementById(page.page).classList.add("active");
