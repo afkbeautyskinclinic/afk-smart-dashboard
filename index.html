@@ -747,13 +747,10 @@ const REFRESH_RESTORE_WINDOW_MS = 45000;
 const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
-const DEFAULT_PIC_LIST = "Ayu Manager, Rizki Digital Marketing & Ads, Rani Creative Performance, Ryan CRM, dr. Keisha Dokter, Nur Hikmah Medis, Ridho Inventory";
+const DEFAULT_PIC_LIST = "Manager Finance & Operational, Manager Marketing, Marketing Digital & Ads, Creative Performance, CRM, Dokter, Tim Medis, Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
 const DEFAULT_PRIMARY_COLOR = "#e81887";
-const CAMPAIGN_RENAMES = {
-  "Glow Booster June": "Skin Barrier Expert"
-};
 const PASSWORDS = {
   Owner: "owner123",
   Manager: "manager123",
@@ -911,58 +908,17 @@ function defaultState() {
       sources: DEFAULT_SOURCE_LIST,
       platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
     },
-    manager: [
-      managerReport("2026-06-21", "Ayu Lestari", 3600000000, 300000000, 12000000, 1500000, 2500000, 18000000, 9000000, 4250000, 1250000, 182500000, -21500000, "Cash in pasien stabil, pembayaran vendor dan payroll sudah terjadwal.", "Sesuai SOP", "Aman", "Aman", "Siap Pakai", "Aman", "Aman", "Aman", "", "Antrian weekend padat di ruang tindakan.", "Tambah buffer jadwal dan koordinasi tim medis.", "Evaluasi slot dokter dan terapis untuk besok.", "Medium", "Dalam Proses", ""),
-      managerReport("2026-06-22", "Ayu Lestari", 3600000000, 300000000, 14500000, 2000000, 1800000, 18000000, 8500000, 3950000, 950000, 185800000, -16700000, "Cash out payroll masih dominan, perlu kontrol biaya operasional harian.", "Perlu Perbaikan", "Menipis", "Aman", "Siap Pakai", "Aman", "Perlu Penyesuaian", "Aman", "Pasien menunggu terlalu lama saat jam ramai.", "Stok skincare aftercare mulai menipis.", "PIC inventory diminta cek stok dan reorder.", "Follow up reorder dan evaluasi SOP antrean.", "High", "Open", "")
-    ],
-    managerMarketingDaily: [
-      managerMarketingDaily("2026-06-21", "Leli Melia", "Lead naik, revenue masih tertahan di high ticket.", "Target 60 lead / realisasi 64 lead; closing high ticket belum selesai.", "Follow-up high ticket lambat setelah konsultasi.", "PIC CRM belum punya prioritas harian untuk pasien bernilai besar.", "Prioritaskan follow-up Hot dan Vaser, pindahkan budget ke campaign ROAS tertinggi.", "CRM follow-up 8 lead Hot, creative revisi hook before-after.", "Potensi kehilangan booking besok jika konfirmasi terlambat.", "Butuh persetujuan Owner untuk tambahan promo closing Vaser.", "Open")
-    ],
-    patientCommand: [
-      patientCommand("2026-06-21", "Dina Anggraeni", "High Ticket Belum Closing", "CRM LD-1004 / Vaser Liposuction", "Dalam Follow Up", "Ryan CRM", "2026-06-22", "Sudah dikontak ulang, menunggu keputusan DP.", "Follow up lanjutan jam 19.00", "High"),
-      patientCommand("2026-06-21", "Maya Kirana", "Aftercare H+1/H+3", "Tim Medis BK-702", "Open", "Nur Hikmah Medis", "2026-06-22", "Perlu cek foto luka dan edukasi ulang.", "", "Medium")
-    ],
-    managerDecisionLog: [
-      managerDecisionLog("2026-06-21", "Leli Melia", "Budget Campaign", "Budget dipindahkan ke Vaser Search High Intent.", "ROAS campaign tertinggi 37.1x dan lead lebih siap booking.", "Rizki Digital Marketing & Ads", "2026-06-22", "Naikkan booking high intent dan tekan CPR.", "Diputuskan", "Menunggu hasil 24 jam")
-    ],
-    ownerEscalation: [
-      ownerEscalation("2026-06-21", "Leli Melia", "Approval promo closing Vaser", "Ada high ticket belum closing karena butuh trigger DP.", "Lead Hot Vaser, revenue potensial Rp18,5 jt.", "High", "Setujui promo DP terbatas untuk 1 pasien prioritas.", "Menunggu Persetujuan", "", "Follow up ke Owner hari ini")
-    ],
-    marketing: [
-      campaign("2026-06-17", "Rizki Digital Marketing & Ads", "Meta Ads", "Skin Barrier Expert", "Lead Generation", 1800000, 26000, 32000, 0.0306, 1837, 980, 85, 21176, 1.23, 85, 42, 20, 12, 21500000, 11.9, "Female 22-45, Jakarta, lookalike buyer 1%", "Creative before-after paling kuat", ""),
-      campaign("2026-06-18", "Rizki Digital Marketing & Ads", "TikTok Ads", "Acne Clear Story", "Messages", 1250000, 33000, 41000, 0.0376, 812, 1540, 76, 16447, 1.24, 76, 33, 18, 9, 12600000, 10.1, "Interest acne care, broad testing 3 creatives", "Hook dokter perform baik", ""),
-      campaign("2026-06-19", "Rizki Digital Marketing & Ads", "Google Ads", "Vaser Search High Intent", "Search", 2100000, 7600, 8200, 0.0537, 4773, 440, 38, 55263, 1.08, 38, 29, 16, 8, 78000000, 37.1, "High intent keywords: vaser, liposuction, body contour", "Keyword mahal tapi ROAS tinggi", ""),
-      campaign("2026-06-20", "Rizki Digital Marketing & Ads", "Meta Ads", "Facial Promo Weekend", "Traffic", 950000, 22000, 26000, 0.0292, 1250, 760, 64, 14844, 1.18, 64, 24, 14, 7, 7200000, 7.6, "Weekend promo ad set, retarget IG engagers", "Perlu landing chat lebih cepat", "")
-    ],
-    content: [
-      content("2026-06-15", "Rani Creative Performance", "CT-201", "Mitos Acne Laser", "Instagram", "Reels", "Jerawat tidak selalu karena skincare", "Chat admin sekarang", "https://drive.example/acne", "2026-06-18", 21000, 18000, 1200, 84, 95, 211, 18, "Posted"),
-      content("2026-06-16", "Rani Creative Performance", "CT-202", "Before After Glow", "TikTok", "Short Video", "Kulit kusam berubah dalam 45 menit", "Booking facial glow", "https://drive.example/glow", "2026-06-20", 39000, 32000, 2300, 160, 201, 410, 34, "Posted"),
-      content("2026-06-19", "Rani Creative Performance", "CT-203", "Dokter Jawab Vaser", "Instagram", "Carousel", "Takut liposuction sakit?", "Konsultasi gratis", "https://drive.example/vaser", "2026-06-25", 0, 0, 0, 0, 0, 0, 0, "Approved"),
-      content("2026-06-21", "Rani Creative Performance", "CT-204", "Checklist Aftercare", "Instagram", "Story", "Simpan panduan setelah treatment", "Save post ini", "https://drive.example/aftercare", "2026-06-23", 8200, 7100, 360, 44, 25, 188, 7, "Editing")
-    ],
-    crm: [
-      lead("2026-06-17", "Ryan CRM", "LD-1001", "NY", "Perempuan", "Jakarta Selatan", "628121110001", "Vaser Liposuction", "Slimming Package", "Iklan", "Hot", "Konsultasi", "2026-06-24", "dr. Keisha", "Mila", "Serum aftercare", 2500000, "Ingin konsultasi body contour", "Butuh follow up cepat", ""),
-      lead("2026-06-18", "Ryan CRM", "LD-1002", "MK", "Perempuan", "Depok", "628121110002", "Mini Surgery", "Scar Care", "Iklan", "Warm", "Booking", "2026-06-23", "dr. Arya", "Tari", "", 1800000, "Booking Sabtu sore", "Tanya cicilan", ""),
-      lead("2026-06-19", "Ryan CRM", "LD-1003", "AR", "Laki-laki", "Bekasi", "628121110003", "Mini Surgery", "Aftercare Kit", "Data Base", "Cold", "Lost", "2026-06-25", "dr. Nabila", "Reno", "", 0, "Budget belum cocok", "Perlu penawaran entry", ""),
-      lead("2026-06-20", "Ryan CRM", "LD-1004", "DN", "Perempuan", "Tangerang", "628121110004", "Vaser Liposuction", "Korset Premium", "Referral", "Hot", "Treatment", "2026-06-27", "dr. Arya", "Mila", "Korset premium", 18500000, "Datang dengan referral", "Closing premium bagus", ""),
-      lead("2026-06-21", "Ryan CRM", "LD-1005", "SA", "Perempuan", "Bogor", "628121110005", "Mini Surgery", "Sunscreen Aftercare", "Walk In", "Warm", "Show Up", "2026-06-26", "dr. Keisha", "Tari", "Sunscreen aftercare", 950000, "Minta dokter perempuan", "Slot dokter terbatas", "")
-    ],
-    doctor: [
-      doctorReport("2026-06-18", "dr. Keisha", "Nadia Putri", "BK-702", "Mini Surgery", "Tari", "Minor surgery kit", "Antibiotik topikal", "Selesai", "Kemerahan ringan", "Kontrol luka sesuai jadwal", "2 minggu", "Edukasi aftercare perlu diperjelas", ""),
-      doctorReport("2026-06-21", "dr. Arya", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "Reno", "Cannula set dan korset", "Analgesik oral", "Pending", "", "Korset 6 minggu", "Kontrol 7 hari", "Menunggu hasil lab", "")
-    ],
-    medis: [
-      treatment("2026-06-17", "Nur Hikmah Medis", "Nadia Putri", "BK-701", "Vaser Liposuction", "dr. Keisha", "Mila", "Ruang 2", "Selesai", "Cannula set", "Gunakan korset sesuai arahan", 700000, "4 minggu", "", "Antrian padat", ""),
-      treatment("2026-06-18", "Nur Hikmah Medis", "Maya Kirana", "BK-702", "Mini Surgery", "dr. Nabila", "Tari", "Ruang Tindakan", "Selesai", "Minor surgery kit", "Kontrol luka sesuai jadwal", 300000, "2 minggu", "Kemerahan ringan", "Edukasi aftercare perlu diperjelas", ""),
-      treatment("2026-06-19", "Nur Hikmah Medis", "Aulia Rahma", "BK-703", "Mini Surgery", "dr. Keisha", "Mila", "Ruang 1", "Selesai", "Minor surgery kit", "Jaga area tindakan tetap kering", 150000, "1 bulan", "", "Produk masker menipis", ""),
-      treatment("2026-06-21", "Nur Hikmah Medis", "Dina Anggraeni", "BK-704", "Vaser Liposuction", "dr. Arya", "Reno", "Ruang Tindakan", "Ditunda", "Cannula set", "Korset 6 minggu", 2500000, "Kontrol 7 hari", "", "Menunggu hasil lab", "")
-    ],
-    inventory: [
-      stock("2026-06-17", "Ridho Inventory", "PR-401", "Serum HA Skin Booster", "Injectable", "Vial", "GlowMed", 24, 10, 18, 12, "2027-02-10", "Butuh reorder jika campaign naik", ""),
-      stock("2026-06-18", "Ridho Inventory", "PR-402", "Masker Collagen Premium", "Consumable", "Pcs", "BeautyLab", 80, 30, 95, 25, "2026-12-12", "Perputaran cepat weekend", ""),
-      stock("2026-06-19", "Ridho Inventory", "PR-403", "Laser Tip A", "Medical Device", "Pcs", "MediTech", 14, 0, 10, 6, "2028-01-30", "Sisa mendekati minimum", ""),
-      stock("2026-06-21", "Ridho Inventory", "PR-404", "Sunscreen Aftercare", "Retail", "Tube", "DermaCare", 35, 12, 8, 15, "2026-09-08", "Stok aman", "")
-    ]
+    manager: [],
+    managerMarketingDaily: [],
+    patientCommand: [],
+    managerDecisionLog: [],
+    ownerEscalation: [],
+    marketing: [],
+    content: [],
+    crm: [],
+    doctor: [],
+    medis: [],
+    inventory: []
   };
 }
 
@@ -1280,7 +1236,6 @@ function normalizeDashboardState(targetState) {
   delete targetState.settings.backendUrl;
   delete targetState.settings.backendToken;
   migrateTreatmentNames(targetState);
-  migrateCampaignNames(targetState);
   migrateMarketingRows(targetState);
   migrateCrmRows(targetState);
   migrateDivisionRows(targetState);
@@ -1316,13 +1271,6 @@ function collectAllDatasetColumns() {
 function mergeFetchedColumnMetadata(result) {
   const fetchedColumns = result.columns || result.headers || result.data?.columns || result.data?.headers || {};
   state.backendColumns = normalizeBackendColumns(fetchedColumns);
-}
-
-function migrateCampaignNames(targetState) {
-  targetState.marketing = (targetState.marketing || []).map(row => ({
-    ...row,
-    name: CAMPAIGN_RENAMES[row.name] || row.name
-  }));
 }
 
 function migrateMarketingRows(targetState) {
@@ -1662,7 +1610,7 @@ function renderAll() {
 
 function renderShell() {
   const k = getKpis();
-  document.getElementById("heroRevenue").textContent = compactMoney(k.monthlyTarget);
+  document.getElementById("heroRevenue").textContent = moneyOrMissing(k.monthlyTarget, "Belum ada target");
   document.getElementById("heroRoas").textContent = compactMoney(k.monthlyRevenue);
   document.getElementById("heroLeads").textContent = compactMoney(k.todayRevenue);
 }
@@ -1685,7 +1633,7 @@ function renderOwner() {
     ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
       ${kpi("Revenue", compactMoney(k.revenue))}
-      ${kpi("Target Achievement", pct(safeDiv(k.monthlyRevenue, k.monthlyTarget)))}
+      ${kpi("Target Achievement", targetAchievementLabel(k))}
       ${kpi("Total Leads", k.totalLeads)}
       ${kpi("Qualified Leads", k.qualified)}
       ${kpi("Booking", k.booking)}
@@ -1724,7 +1672,7 @@ function renderOwnerControlTower(k) {
     <div class="kpi-grid">
       ${kpi("Omzet Hari Ini", compactMoney(k.todayRevenue))}
       ${kpi("Omzet Bulan Berjalan", compactMoney(k.monthlyRevenue))}
-      ${kpi("Progress Target", pct(safeDiv(k.monthlyRevenue, k.monthlyTarget)))}
+      ${kpi("Progress Target", targetAchievementLabel(k))}
       ${kpi("Forecast Akhir Bulan", compactMoney(k.forecastRevenue))}
       ${kpi("Estimasi Profit", compactMoney(k.estimatedProfit))}
       ${kpi("Cash In", compactMoney(k.cashIn))}
@@ -1798,7 +1746,7 @@ function renderManager() {
       ${kpi("Cash Out", compactMoney(k.cashOut))}
       ${kpi("Saldo Kas", compactMoney(k.cashBalance))}
       ${kpi("Laba / Rugi", compactMoney(k.profitLoss))}
-      ${kpi("Anggaran Bulanan", compactMoney(k.monthlyBudget))}
+      ${kpi("Anggaran Bulanan", moneyOrMissing(k.monthlyBudget, "Belum ada anggaran"))}
       ${kpi("Outstanding Operasional", k.openOperationalIssues)}
     </div>
     ${managerForm()}
@@ -2460,9 +2408,9 @@ function renderReports() {
         <button class="ghost-button" type="button" data-export-pdf="${reportFilters.division}">Export PDF</button>
       </div>
       <div class="three-col">
-        ${kpi("Rekap Harian", compactMoney(getKpis().revenue / 7))}
-        ${kpi("Rekap Mingguan", compactMoney(getKpis().revenue))}
-        ${kpi("Rekap Bulanan", compactMoney(getKpis().revenue * 4.1))}
+        ${kpi("Rekap Harian", compactMoney(sumFilteredReportRevenue("day")))}
+        ${kpi("Rekap Mingguan", compactMoney(sumFilteredReportRevenue("week")))}
+        ${kpi("Rekap Bulanan", compactMoney(sumFilteredReportRevenue("month")))}
       </div>
     </div>
     ${reportSummaryCard("Manager Summary", "manager", reportRows.manager, ["date","managerName","dailyRevenue","totalRevenue","teamBonus"])}
@@ -2503,6 +2451,26 @@ function getFilteredReportRows() {
     acc[dataset] = filterRowsByDate(state[dataset] || []);
     return acc;
   }, {});
+}
+
+function sumFilteredReportRevenue(scope) {
+  const rows = Object.values(getFilteredReportRows()).flat();
+  const latest = latestIsoDate(rows) || new Date().toISOString().slice(0, 10);
+  const latestDate = new Date(`${latest}T00:00:00`);
+  return rows.reduce((total, row) => {
+    const rowDate = row.date || row.publishDate || "";
+    if (!rowDate) return total;
+    const date = new Date(`${rowDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return total;
+    if (scope === "day" && rowDate !== latest) return total;
+    if (scope === "week" && Math.floor((latestDate - date) / 86400000) > 6) return total;
+    if (scope === "month" && rowDate.slice(0, 7) !== latest.slice(0, 7)) return total;
+    return total + reportRowRevenue(row);
+  }, 0);
+}
+
+function reportRowRevenue(row) {
+  return num(row.cashInPatient) + num(row.cashInOther) + num(row.revenue) + num(row.upsales) + num(row.dailyOmzet);
 }
 
 function filterRowsByDate(rows) {
@@ -2868,9 +2836,11 @@ function canManageDataset(dataset) {
 
 function renderCharts() {
   if (activePage === "owner") {
-    makeChart("funnelChart", "bar", ["Lead", "Qualified", "Booking", "Show Up", "Treatment", "Rebooking", "Referral"], [getKpis().totalLeads, getKpis().qualified, getKpis().booking, getKpis().showUp, getKpis().treatment, 16, 9]);
+    const kpis = getKpis();
+    const sourceRows = getLeadSourceRows();
+    makeChart("funnelChart", "bar", ["Lead", "Qualified", "Booking", "Show Up", "Treatment", "Rebooking", "Referral"], [kpis.totalLeads, kpis.qualified, kpis.booking, kpis.showUp, kpis.treatment, kpis.rebooking, kpis.referral]);
     makeChart("revenueChart", "line", state.crm.map(x => x.date), state.crm.map(x => x.revenue), true);
-    makeChart("sourceChart", "doughnut", splitSetting("sources"), [30, 24, 18, 14, 10, 8, 6, 4]);
+    makeChart("sourceChart", "doughnut", sourceRows.map(row => row.source), sourceRows.map(row => row.total));
   }
   if (activePage === "marketing") {
     makeChart("spendRevenueChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => x.spend), false, state.marketing.map(x => x.revenue));
@@ -3000,7 +2970,7 @@ function getKpis() {
   const monthPrefix = latestDate.slice(0, 7);
   const todayRevenue = revenueOnDate(latestDate);
   const monthlyRevenue = revenueInMonth(monthPrefix);
-  const monthlyTarget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget") || 300000000;
+  const monthlyTarget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget");
   const forecastRevenue = forecastMonth(monthlyRevenue, latestDate);
   const expenses = (managerCashOut || (adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"))) + divisionExpense;
   const todayPatients = uniquePatientCount(latestDate);
@@ -3048,14 +3018,16 @@ function latestNumber(rows, key) {
 function revenueOnDate(date) {
   const managerRows = state.manager.filter(x => x.date === date);
   const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
-  return sum(state.crm.filter(x => x.date === date), "revenue") + sum(state.marketing.filter(x => x.date === date), "revenue") + sum(state.medis.filter(x => x.date === date), "upsales") + (managerCash || sum(managerRows, "dailyRevenue"));
+  const divisionOmzet = sum(state.marketing.filter(x => x.date === date), "dailyOmzet") + sum(state.content.filter(x => x.date === date), "dailyOmzet") + sum(state.crm.filter(x => x.date === date), "dailyOmzet") + sum(state.doctor.filter(x => x.date === date), "dailyOmzet") + sum(state.medis.filter(x => x.date === date), "dailyOmzet") + sum(state.inventory.filter(x => x.date === date), "dailyOmzet");
+  return sum(state.crm.filter(x => x.date === date), "revenue") + sum(state.marketing.filter(x => x.date === date), "revenue") + sum(state.medis.filter(x => x.date === date), "upsales") + divisionOmzet + (managerCash || sum(managerRows, "dailyRevenue"));
 }
 
 function revenueInMonth(monthPrefix) {
   const inMonth = row => String(row.date || "").startsWith(monthPrefix);
   const managerRows = state.manager.filter(inMonth);
   const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
-  return sum(state.crm.filter(inMonth), "revenue") + sum(state.marketing.filter(inMonth), "revenue") + sum(state.medis.filter(inMonth), "upsales") + (managerCash || sum(managerRows, "dailyRevenue"));
+  const divisionOmzet = sum(state.marketing.filter(inMonth), "dailyOmzet") + sum(state.content.filter(inMonth), "dailyOmzet") + sum(state.crm.filter(inMonth), "dailyOmzet") + sum(state.doctor.filter(inMonth), "dailyOmzet") + sum(state.medis.filter(inMonth), "dailyOmzet") + sum(state.inventory.filter(inMonth), "dailyOmzet");
+  return sum(state.crm.filter(inMonth), "revenue") + sum(state.marketing.filter(inMonth), "revenue") + sum(state.medis.filter(inMonth), "upsales") + divisionOmzet + (managerCash || sum(managerRows, "dailyRevenue"));
 }
 
 function forecastMonth(value, isoDate) {
@@ -3072,6 +3044,24 @@ function uniquePatientCount(date) {
     if (name) names.add(String(name).trim().toLowerCase());
   });
   return names.size;
+}
+
+function getLeadSourceRows() {
+  return splitSetting("sources").map(source => ({ source, total: leadSourceValue(source) }));
+}
+
+function leadSourceValue(source) {
+  const sourceText = String(source || "").toLowerCase();
+  if (sourceText.includes("data base") || sourceText.includes("database")) return state.crm.filter(row => /data base|database/i.test(row.status)).length;
+  if (sourceText.includes("walk")) return state.crm.filter(row => /walk/i.test(row.status)).length;
+  if (sourceText.includes("referral")) return state.crm.filter(row => /referral/i.test(row.status)).length;
+  if (sourceText.includes("website")) return state.crm.filter(row => /website|web/i.test(`${row.status} ${row.source || ""}`)).length;
+  if (sourceText.includes("meta") || sourceText.includes("facebook") || sourceText.includes("fb")) return sum(state.marketing.filter(row => /meta|facebook|fb/i.test(row.platform)), "leads");
+  if (sourceText.includes("instagram")) return sum(state.marketing.filter(row => /instagram|ig/i.test(row.platform)), "leads");
+  if (sourceText.includes("tiktok")) return sum(state.marketing.filter(row => /tiktok/i.test(row.platform)), "leads");
+  if (sourceText.includes("google")) return sum(state.marketing.filter(row => /google/i.test(row.platform)), "leads");
+  if (sourceText.includes("iklan") || sourceText.includes("ads")) return state.crm.filter(row => /iklan/i.test(row.status)).length + sum(state.marketing, "leads");
+  return 0;
 }
 
 function getOwnerTopProblems() {
@@ -3099,7 +3089,7 @@ function getManagerKpis() {
   const cashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther") || (sum(state.manager, "adSpend") + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"));
   const latestBalance = latestNumber(state.manager, "cashBalance");
   const profitLoss = sum(state.manager, "profitLoss") || (cashIn - cashOut);
-  const monthlyBudget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget") || 300000000;
+  const monthlyBudget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget");
   const openOperationalIssues = state.manager.filter(row => (row.operationalIssue || row.patientComplaint) && !["Selesai", "Done"].includes(row.status)).length;
   return { cashIn, cashOut, cashBalance: latestBalance || (cashIn - cashOut), profitLoss, monthlyBudget, openOperationalIssues, dailyRevenue: cashIn, totalRevenue: cashIn, totalExpense: cashOut, teamBonus: sum(state.manager, "teamBonus") };
 }
@@ -3286,6 +3276,7 @@ function getIntegratedOwnerControlRows() {
 
 function integratedRow(area, sourceA, valueA, sourceB, valueB, action) {
   const gap = num(valueA) - num(valueB);
+  const hasData = num(valueA) > 0 || num(valueB) > 0;
   const status = Math.abs(gap) <= integratedTolerance(area, valueA, valueB) ? "Selaras" : "Perlu Cek";
   return {
     area,
@@ -3295,7 +3286,7 @@ function integratedRow(area, sourceA, valueA, sourceB, valueB, action) {
     valueB: formatIntegratedValue(area, valueB),
     gap: formatIntegratedValue(area, gap),
     status,
-    action
+    action: !hasData ? "Belum ada data valid dari kedua sumber." : status === "Selaras" ? "Tidak ada tindakan korektif. Tetap monitor input harian." : action
   };
 }
 
@@ -3342,7 +3333,7 @@ function ownerDecisionAlert(severity, title, detail, action) {
 
 function countBlankCriticalFields() {
   const required = {
-    manager: ["date","managerName","dailyRevenue","totalRevenue"],
+    manager: ["date","managerName","monthlyBudget","cashInPatient","cashOutOperational","cashBalance"],
     marketing: ["date","userName","leads","booking","showUp","treatment","revenue"],
     content: ["date","userName","title","platform","status"],
     crm: ["date","userName","name","wa","responseLead","followUp"],
@@ -3397,8 +3388,9 @@ function getComplaintRows() {
 }
 
 function getRevenueAlignment() {
-  const managerRevenue = sum(state.manager, "dailyRevenue");
-  const operationalRevenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales");
+  const managerCashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther");
+  const managerRevenue = managerCashIn || sum(state.manager, "dailyRevenue");
+  const operationalRevenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + sum(state.marketing, "dailyOmzet") + sum(state.content, "dailyOmzet") + sum(state.crm, "dailyOmzet") + sum(state.doctor, "dailyOmzet") + sum(state.medis, "dailyOmzet") + sum(state.inventory, "dailyOmzet");
   return { managerRevenue, operationalRevenue, gap: managerRevenue - operationalRevenue };
 }
 
@@ -3459,8 +3451,8 @@ function getOwnerExportSections() {
     },
     {
       title: "Leads Berdasarkan Source",
-      headers: ["source"],
-      rows: splitSetting("sources").map(source => ({ source }))
+      headers: ["source", "total"],
+      rows: getLeadSourceRows()
     }
   ];
 }
@@ -3642,6 +3634,8 @@ function pct(value) { return `${(num(value) * 100).toFixed(1)}%`; }
 function money(value) { return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num(value)); }
 function formatNumber(value) { return new Intl.NumberFormat("id-ID").format(num(value)); }
 function displayKpiValue(value) { return typeof value === "number" ? formatNumber(value) : value; }
+function moneyOrMissing(value, fallbackText) { return num(value) > 0 ? compactMoney(value) : fallbackText; }
+function targetAchievementLabel(k) { return num(k.monthlyTarget) > 0 ? pct(safeDiv(k.monthlyRevenue, k.monthlyTarget)) : "Belum ada target"; }
 function compactMoney(value) {
   const amount = num(value);
   const abs = Math.abs(amount);
