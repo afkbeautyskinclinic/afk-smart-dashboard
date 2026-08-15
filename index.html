@@ -789,22 +789,24 @@ let searchRenderTimer = null;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const DATASET_KEYS = ["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"];
+const DIVISION_DATASETS = ["marketing", "content", "crm", "doctor", "medis", "inventory"];
+const MANAGER_MARKETING_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const EDITABLE_REPORT_FIELDS = {
   manager: ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"],
   managerMarketingDaily: ["date","managerName","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","status","ownerNote"],
   patientCommand: ["date","patientName","caseType","sourceData","status","pic","targetDate","progress","followUpResult","urgency","ownerNote"],
   managerDecisionLog: ["date","managerName","decisionType","decision","dataBasis","assignedTo","deadline","expectedImpact","status","result","ownerNote"],
   ownerEscalation: ["date","managerName","topic","reason","supportingData","urgency","requestedDecision","status","ownerResponse","followUp","ownerNote"],
-  marketing: ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"],
-  content: ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"],
-  crm: ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"],
-  doctor: ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"],
-  medis: ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"],
-  inventory: ["date","userName","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","mediaLinks","bottleneck","ownerNote"]
+  marketing: ["date","userName","activityReport","dailyOmzet","dailyExpense","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","performanceNote","bottleneck","mediaLinks","ownerNote"],
+  content: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","performanceNote","mediaLinks","ownerNote"],
+  crm: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","performanceNote","mediaLinks","bottleneck","ownerNote"],
+  doctor: ["date","doctorName","activityReport","dailyOmzet","dailyExpense","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","performanceNote","bottleneck","mediaLinks","ownerNote"],
+  medis: ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"],
+  inventory: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","performanceNote","mediaLinks","bottleneck","ownerNote"]
 };
-const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
+const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired","targetDate","deadline"]);
-const TEXTAREA_REPORT_FIELDS = new Set(["address","note","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
+const TEXTAREA_REPORT_FIELDS = new Set(["address","note","activityReport","performanceNote","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
 const INTERNAL_FIELDS = new Set(["__index"]);
 const COMPUTED_FIELDS = new Set(["finalStock","stockStatus","cpl","cpc","cpr","ctr","frequency","roas"]);
 const chartDepthPlugin = {
@@ -1118,7 +1120,14 @@ function getBackendColumns(dataset) {
 
 function collectAllDatasetColumns() {
   return DATASET_KEYS.reduce((acc, dataset) => {
-    acc[dataset] = resolveTableColumns(dataset, state[dataset] || [], (state[dataset] || []).map(row => normalizeRow(row)), EDITABLE_REPORT_FIELDS[dataset] || []);
+    const columns = [...(EDITABLE_REPORT_FIELDS[dataset] || [])];
+    getBackendColumns(dataset).forEach(key => {
+      if (!columns.includes(key)) columns.push(key);
+    });
+    collectRowKeys(state[dataset] || []).forEach(key => {
+      if (!columns.includes(key) && !INTERNAL_FIELDS.has(key) && !COMPUTED_FIELDS.has(key)) columns.push(key);
+    });
+    acc[dataset] = columns;
     return acc;
   }, {});
 }
@@ -1350,7 +1359,7 @@ function handleLogin(event) {
 }
 
 function visibleNavItems() {
-  return NAV.filter(item => currentRole === "Owner" || !["owner", "settings"].includes(item.id));
+  return NAV.filter(item => canAccessPage(item.id));
 }
 
 function buildNavigation() {
@@ -1369,11 +1378,42 @@ function buildNavigation() {
 }
 
 function navButton(item) {
-  const disabled = currentRole !== "Owner" && ["owner", "settings"].includes(item.id);
+  const disabled = !canAccessPage(item.id);
   return `<button class="nav-item ${activePage === item.id ? "active" : ""} ${disabled ? "disabled" : ""}" data-nav="${item.id}">
     <span>${item.icon}</span><span>${item.label}</span>
   </button>`;
 }
+
+function isManagerRole(role = currentRole) {
+  return ["Manager Finance & Operational", "Manager Marketing"].includes(role);
+}
+
+function isDivisionPage(pageId) {
+  return ["marketing", "content", "crm", "doctor", "medis", "inventory"].includes(pageId);
+}
+
+function canAccessPage(pageId) {
+  if (currentRole === "Owner") return true;
+  if (isManagerRole()) {
+    if (pageId === "reports") return true;
+    if (currentRole === "Manager Finance & Operational" && pageId === "manager") return true;
+    if (currentRole === "Manager Marketing" && pageId === "managerMarketing") return true;
+    return isDivisionPage(pageId);
+  }
+  return isDivisionPage(pageId) || pageId === rolePage(currentRole);
+}
+
+function canViewDataset(dataset) {
+  if (currentRole === "Owner") return DATASET_KEYS.includes(dataset);
+  if (currentRole === "Manager Finance & Operational") return dataset === "manager" || DIVISION_DATASETS.includes(dataset);
+  if (currentRole === "Manager Marketing") return MANAGER_MARKETING_DATASETS.includes(dataset) || DIVISION_DATASETS.includes(dataset);
+  return DIVISION_DATASETS.includes(dataset);
+}
+
+function getAccessibleReportDatasets() {
+  return DATASET_KEYS.filter(canViewDataset);
+}
+
 function canEdit(section) {
   const map = { manager: "Manager Finance & Operational", managerMarketingDaily: "Manager Marketing", patientCommand: "Manager Marketing", managerDecisionLog: "Manager Marketing", ownerEscalation: "Manager Marketing", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
   return currentRole === map[section];
@@ -1390,7 +1430,17 @@ function normalizeRoleName(role) {
 }
 
 function canOwnerNote() {
-  return currentRole === "Owner";
+  return true;
+}
+
+function canWriteEscalationNote(dataset) {
+  if (currentRole === "Owner") return OWNER_MANAGED_DATASETS.has(dataset);
+  if (isManagerRole()) return DIVISION_DATASETS.includes(dataset);
+  return false;
+}
+
+function escalationNoteLabel() {
+  return currentRole === "Owner" ? "Catatan Owner" : "Catatan Manager";
 }
 
 function renderAll() {
@@ -1419,7 +1469,7 @@ function renderShell() {
   document.getElementById("heroLeads").textContent = compactMoney(k.todayRevenue);
 }
 function renderActivePage() {
-  if (currentRole !== "Owner" && ["owner", "settings"].includes(activePage)) activePage = rolePage(currentRole);
+  if (!canAccessPage(activePage)) activePage = rolePage(currentRole);
   document.querySelectorAll(".page-panel").forEach(panel => panel.classList.remove("active"));
   const page = NAV.find(item => item.id === activePage) || NAV.find(item => item.id === "crm");
   document.getElementById(page.page).classList.add("active");
@@ -1805,7 +1855,7 @@ function renderCrm() {
       ${kpi("Lost Rate", pct(k.lostRate))}
     </div>
     ${crmForm()}
-    ${tableCard("Data Leads", "crm", rows, ["date","userName","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Data Leads", "crm", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","performanceNote","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("crmForm", addCrm);
 }
@@ -1814,6 +1864,9 @@ function crmForm() {
   return formCard("crmForm", "Form Input Lead", "crm", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama CRM"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Omzet Harian CRM", "number"),
+    input("dailyExpense", "Pengeluaran Harian CRM", "number"),
     input("id", "Lead ID", "text", nextId("LD", state.crm.length + 1001)),
     input("name", "Nama/Inisial Pasien"),
     select("gender", "Jenis Kelamin", ["Perempuan", "Laki-laki"]),
@@ -1830,12 +1883,15 @@ function crmForm() {
     textarea("upSellingCrossSelling", "Up Selling / Cross Selling"),
     input("revenue", "Revenue", "number"),
     textarea("voiceOfPatient", "Voice Of Patient"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
   ]);
 }
 
 async function addCrm(data, fileFields = {}) {
+  data.dailyOmzet = num(data.dailyOmzet);
+  data.dailyExpense = num(data.dailyExpense);
   data.revenue = num(data.revenue);
   data.upSellingCrossSelling = data.upSellingCrossSelling || "";
   data.voiceOfPatient = data.voiceOfPatient || data.note || "";
@@ -1867,7 +1923,7 @@ function renderMarketing() {
       ${chartCard("Leads per Platform", "platformChart")}
       ${chartCard("CPR per Campaign", "cplChart")}
     </div>
-    ${tableCard("Campaign Report", "marketing", rows, ["date","userName","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","bottleneck","mediaLinks","ownerNote"])}
+    ${tableCard("Campaign Report", "marketing", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","platform","name","objective","spend","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas","adSetSetting","performanceNote","bottleneck","mediaLinks","ownerNote"])}
   `;
   bindForm("marketingForm", addMarketing);
 }
@@ -1876,6 +1932,9 @@ function marketingForm() {
   return formCard("marketingForm", "Form Input Laporan Iklan Harian", "marketing", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama Marketing Digital & Ads"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Omzet Harian", "number"),
+    input("dailyExpense", "Pengeluaran Harian", "number"),
     select("platform", "Platform", splitSetting("platforms")),
     input("name", "Campaign Name"),
     select("objective", "Objective", ["Awareness", "Traffic", "Engagement", "Leads", "App Promotion", "Sales"]),
@@ -1896,13 +1955,14 @@ function marketingForm() {
     input("revenue", "Revenue", "number"),
     input("roas", "ROAS", "number"),
     textarea("adSetSetting", "Setting Ad Set"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true)
   ]);
 }
 
 async function addMarketing(data, fileFields = {}) {
-  ["spend","reach","impressions","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas"].forEach(key => data[key] = num(data[key]));
+  ["dailyOmzet","dailyExpense","spend","reach","impressions","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","revenue","roas"].forEach(key => data[key] = num(data[key]));
   data.ctr = normalizeRateInput(data.ctr || safeDiv(data.clicks, data.impressions));
   data.cpc = data.cpc || safeDiv(data.spend, data.clicks);
   data.cpr = data.cpr || safeDiv(data.spend, data.leads || data.whatsappChats);
@@ -1930,7 +1990,7 @@ function renderContent() {
     </div>
     ${contentForm()}
     <div class="table-card"><h3>Pipeline Konten</h3><div class="kanban-board">${kanban()}</div></div>
-    ${tableCard("Creative Performance Calendar", "content", rows, ["date","userName","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","mediaLinks","ownerNote"])}
+    ${tableCard("Creative Performance Calendar", "content", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","performanceNote","mediaLinks","ownerNote"])}
   `;
   bindForm("contentForm", addContent);
 }
@@ -1939,6 +1999,9 @@ function contentForm() {
   return formCard("contentForm", "Form Input Konten", "content", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama Creative Performance"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Omzet Harian Dari Konten", "number"),
+    input("dailyExpense", "Pengeluaran Produksi Konten", "number"),
     input("id", "Content ID", "text", nextId("CT", state.content.length + 205)),
     input("title", "Judul Konten"),
     select("platform", "Platform", splitSetting("platforms")),
@@ -1954,13 +2017,14 @@ function contentForm() {
     input("shares", "Shares", "number"),
     input("saves", "Saves", "number"),
     input("leads", "Leads Generated", "number"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
     select("status", "Pipeline", ["Idea", "Script", "Design", "Editing", "Revision", "Approved", "Posted"])
   ]);
 }
 
 async function addContent(data, fileFields = {}) {
-  ["views","reach","likes","comments","shares","saves","leads"].forEach(key => data[key] = num(data[key]));
+  ["dailyOmzet","dailyExpense","views","reach","likes","comments","shares","saves","leads"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "content", data);
   state.content.unshift({ ...data, ownerNote: "" });
   saveState();
@@ -1981,7 +2045,7 @@ function renderDoctor() {
       ${kpi("Rekomendasi Rebooking", k.rebooking)}
     </div>
     ${doctorForm()}
-    ${tableCard("Laporan Dokter", "doctor", rows, ["date","doctorName","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","bottleneck","mediaLinks","ownerNote"])}
+    ${tableCard("Laporan Dokter", "doctor", rows, ["date","doctorName","activityReport","dailyOmzet","dailyExpense","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","performanceNote","bottleneck","mediaLinks","ownerNote"])}
   `;
   bindForm("doctorForm", addDoctor);
 }
@@ -1990,6 +2054,9 @@ function doctorForm() {
   return formCard("doctorForm", "Form Input Laporan Dokter", "doctor", [
     input("date", "Tanggal", "date"),
     input("doctorName", "Nama Dokter"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Omzet Treatment Dokter", "number"),
+    input("dailyExpense", "Pengeluaran/Obat Terpakai", "number"),
     input("patientName", "Nama Lengkap Pasien"),
     input("bookingId", "Booking ID"),
     select("treatmentName", "Jenis Treatment", splitSetting("treatments")),
@@ -2000,12 +2067,15 @@ function doctorForm() {
     textarea("complaint", "Keluhan Pasien"),
     textarea("aftercare", "Catatan Aftercare"),
     input("rebooking", "Rekomendasi Rebooking"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     textarea("bottleneck", "Bottleneck"),
     fileInput("mediaFiles", "Upload Foto/Video Before After", "image/*,video/*", true)
   ]);
 }
 
 async function addDoctor(data, fileFields = {}) {
+  data.dailyOmzet = num(data.dailyOmzet);
+  data.dailyExpense = num(data.dailyExpense);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "doctor", data);
   state.doctor.unshift({ ...data, ownerNote: "" });
   saveState();
@@ -2027,7 +2097,7 @@ function renderMedis() {
     </div>
     ${medisForm()}
     ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => !isTreatmentDone(x.status)), ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status"])}
-    ${tableCard("Treatment Report", "medis", rows, ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Treatment Report", "medis", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("medisForm", addMedis);
 }
@@ -2036,6 +2106,9 @@ function medisForm() {
   return formCard("medisForm", "Form Input Laporan Treatment", "medis", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama Tim Medis"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Omzet Harian Treatment", "number"),
+    input("dailyExpense", "Pengeluaran Produk/Alat", "number"),
     input("patientId", "Nama Pasien"),
     input("bookingId", "Booking ID"),
     select("treatmentName", "Treatment", splitSetting("treatments")),
@@ -2048,12 +2121,15 @@ function medisForm() {
     input("upsales", "Up Sales", "number"),
     input("rebooking", "Rekomendasi Rebooking"),
     input("complaint", "Keluhan Pasien"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto Before-After & Video Treatment", "image/*,video/*", true),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
   ]);
 }
 
 async function addMedis(data, fileFields = {}) {
+  data.dailyOmzet = num(data.dailyOmzet);
+  data.dailyExpense = num(data.dailyExpense);
   data.upsales = num(data.upsales);
   const mediaFiles = fileFields.mediaFiles || [];
   data.mediaLinks = "";
@@ -2130,7 +2206,7 @@ function renderInventory() {
     </div>
     ${inventoryForm()}
     ${tableCard("Alert Stok Menipis & Expired Date", "inventoryAlerts", rows.filter(x => stockStatus(x) !== "Aman" || expiringSoon(x)), ["date","userName","id","name","category","finalStock","minimum","expired","stockStatus"])}
-    ${tableCard("Current Stock", "inventory", rows, ["date","userName","id","name","category","unit","supplier","initial","inQty","outQty","finalStock","minimum","expired","stockStatus","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Current Stock", "inventory", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","finalStock","minimum","expired","stockStatus","performanceNote","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("inventoryForm", addInventory);
 }
@@ -2139,6 +2215,9 @@ function inventoryForm() {
   return formCard("inventoryForm", "Master Barang / Stock In / Stock Out", "inventory", [
     input("date", "Tanggal", "date"),
     input("userName", "Nama GA"),
+    textarea("activityReport", "Ringkasan Aktivitas Harian"),
+    input("dailyOmzet", "Nilai Barang Keluar / Pemakaian", "number"),
+    input("dailyExpense", "Nilai Pembelian / Pengeluaran", "number"),
     input("id", "Product ID"),
     input("name", "Nama Barang"),
     input("category", "Kategori"),
@@ -2149,13 +2228,14 @@ function inventoryForm() {
     input("outQty", "Stock Out", "number"),
     input("minimum", "Minimum Stock", "number"),
     input("expired", "Expired Date", "date"),
+    textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
   ]);
 }
 
 async function addInventory(data, fileFields = {}) {
-  ["initial","inQty","outQty","minimum"].forEach(key => data[key] = num(data[key]));
+  ["dailyOmzet","dailyExpense","initial","inQty","outQty","minimum"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "inventory", data);
   state.inventory.unshift({ ...data, ownerNote: "" });
   saveState();
@@ -2165,6 +2245,8 @@ async function addInventory(data, fileFields = {}) {
 
 function renderReports() {
   const reportRows = getFilteredReportRows();
+  const accessibleDatasets = getAccessibleReportDatasets();
+  if (reportFilters.division !== "all" && !accessibleDatasets.includes(reportFilters.division)) reportFilters.division = "all";
   document.getElementById("reportsPage").innerHTML = `
     ${sectionHead("Reports", "Rekap harian, mingguan, bulanan, export CSV, PDF, dan filter divisi.")}
     <div class="table-card">
@@ -2172,18 +2254,7 @@ function renderReports() {
         <input type="date" id="reportStart" value="${escapeHtml(reportFilters.start)}">
         <input type="date" id="reportEnd" value="${escapeHtml(reportFilters.end)}">
         <select id="reportDivision">
-          ${reportDivisionOption("all", "Semua Divisi")}
-          ${reportDivisionOption("manager", "Manager")}
-          ${reportDivisionOption("managerMarketingDaily", "Manager Marketing - Daily Report")}
-          ${reportDivisionOption("patientCommand", "Patient Command Board")}
-          ${reportDivisionOption("managerDecisionLog", "Manager Decision Log")}
-          ${reportDivisionOption("ownerEscalation", "Owner Escalation")}
-          ${reportDivisionOption("marketing", "Marketing")}
-          ${reportDivisionOption("content", "Creative Performance")}
-          ${reportDivisionOption("crm", "CRM")}
-          ${reportDivisionOption("doctor", "Dokter")}
-          ${reportDivisionOption("medis", "Medis")}
-          ${reportDivisionOption("inventory", "Inventory")}
+          ${reportDivisionOptions(accessibleDatasets)}
         </select>
         <button class="primary-button" type="button" data-export="${reportFilters.division}">Export CSV</button>
         <button class="ghost-button" type="button" data-export-pdf="${reportFilters.division}">Export PDF</button>
@@ -2199,12 +2270,12 @@ function renderReports() {
     ${reportSummaryCard("Patient Command Summary", "patientCommand", reportRows.patientCommand, ["date","patientName","caseType","status","pic","targetDate","progress","followUpResult","urgency"])}
     ${reportSummaryCard("Manager Decision Log Summary", "managerDecisionLog", reportRows.managerDecisionLog, ["date","managerName","decisionType","decision","assignedTo","deadline","status","result"])}
     ${reportSummaryCard("Owner Escalation Summary", "ownerEscalation", reportRows.ownerEscalation, ["date","managerName","topic","urgency","requestedDecision","status","ownerResponse","followUp"])}
-    ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","platform","name","spend","reach","impressions","clicks","whatsappChats","cpr","leads","revenue","roas"])}
-    ${reportSummaryCard("Creative Performance Summary", "content", reportRows.content, ["date","userName","id","title","platform","status","leads"])}
-    ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","id","name","interest","productInterest","status","category","responseLead","followUp","upSellingCrossSelling","revenue"])}
-    ${reportSummaryCard("Dokter Summary", "doctor", reportRows.doctor, ["date","doctorName","patientName","bookingId","treatmentName","status"])}
-    ${reportSummaryCard("Tim Medis Summary", "medis", reportRows.medis, ["date","userName","patientId","bookingId","treatmentName","status"])}
-    ${reportSummaryCard("Inventory Summary", "inventory", reportRows.inventory, ["date","userName","id","name","finalStock","minimum","stockStatus","expired"])}
+    ${reportSummaryCard("Marketing Summary", "marketing", reportRows.marketing, ["date","userName","activityReport","dailyOmzet","dailyExpense","platform","name","spend","leads","booking","showUp","treatment","revenue","roas","performanceNote"])}
+    ${reportSummaryCard("Creative Performance Summary", "content", reportRows.content, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","status","leads","performanceNote"])}
+    ${reportSummaryCard("CRM Summary", "crm", reportRows.crm, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","interest","productInterest","status","category","responseLead","followUp","upSellingCrossSelling","revenue","performanceNote"])}
+    ${reportSummaryCard("Dokter Summary", "doctor", reportRows.doctor, ["date","doctorName","activityReport","dailyOmzet","dailyExpense","patientName","bookingId","treatmentName","status","performanceNote"])}
+    ${reportSummaryCard("Tim Medis Summary", "medis", reportRows.medis, ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","status","upsales","performanceNote"])}
+    ${reportSummaryCard("Inventory Summary", "inventory", reportRows.inventory, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","finalStock","minimum","stockStatus","expired","performanceNote"])}
   `;
   bindReportFilters();
   bindExports();
@@ -2213,17 +2284,22 @@ function renderReports() {
   bindOwnerNotes();
 }
 
+function reportDivisionOptions(datasets) {
+  return [reportDivisionOption("all", "Semua Data Yang Bisa Diakses"), ...datasets.map(dataset => reportDivisionOption(dataset, exportTitle(dataset)))].join("");
+}
+
 function reportDivisionOption(value, text) {
   return `<option value="${value}" ${reportFilters.division === value ? "selected" : ""}>${text}</option>`;
 }
 
 function reportSummaryCard(title, dataset, rows, columns) {
+  if (!canViewDataset(dataset)) return "";
   if (reportFilters.division !== "all" && reportFilters.division !== dataset) return "";
   return tableCard(title, dataset, rows, columns);
 }
 
 function getFilteredReportRows() {
-  return DATASET_KEYS.reduce((acc, dataset) => {
+  return getAccessibleReportDatasets().reduce((acc, dataset) => {
     acc[dataset] = filterRowsByDate(state[dataset] || []);
     return acc;
   }, {});
@@ -2356,6 +2432,7 @@ function resolveTableColumns(dataset, rawRows, dataRows, defaultColumns = []) {
 
 function shouldKeepDefaultColumn(dataset, col, rows) {
   if (dataset === "manager") return true;
+  if (DIVISION_DATASETS.includes(dataset) && ["activityReport", "dailyOmzet", "dailyExpense", "performanceNote"].includes(col)) return true;
   if (["ownerNote", "mediaLinks"].includes(col)) return true;
   if (dataset === "inventory" && ["finalStock", "stockStatus"].includes(col)) return true;
   return rows.some(row => row[col] !== undefined && row[col] !== "");
@@ -2396,12 +2473,12 @@ function tableCell(dataset, row, col) {
   if (col === "ownerNote") {
     const noteValue = ownerNoteValue(value);
     if (row.__readonly) return `<td class="owner-note-cell"><span class="owner-note-text">${escapeHtml(noteValue)}</span></td>`;
-    if (canOwnerNote()) return `<td class="owner-note-cell"><textarea class="owner-note-input" maxlength="${OWNER_NOTE_MAX_LENGTH}" data-note-dataset="${dataset}" data-index="${row.__index}" placeholder="Catatan Owner">${escapeHtml(noteValue)}</textarea><small class="owner-note-count">${noteValue.length}/${OWNER_NOTE_MAX_LENGTH}</small></td>`;
+    if (canWriteEscalationNote(dataset)) return `<td class="owner-note-cell"><textarea class="owner-note-input" maxlength="${OWNER_NOTE_MAX_LENGTH}" data-note-dataset="${dataset}" data-index="${row.__index}" placeholder="${escapeHtml(escalationNoteLabel())}">${escapeHtml(noteValue)}</textarea><small class="owner-note-count">${noteValue.length}/${OWNER_NOTE_MAX_LENGTH}</small></td>`;
     return `<td class="owner-note-cell"><span class="owner-note-text">${escapeHtml(noteValue)}</span></td>`;
   }
   if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
-  if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
+  if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
   if (["ctr"].includes(col)) return `<td>${pct(num(value))}</td>`;
   if (["roas"].includes(col)) return `<td>${num(value).toFixed(1)}x</td>`;
   return `<td>${escapeHtml(value)}</td>`;
@@ -2488,7 +2565,7 @@ function bindEdits() {
 }
 
 function openEditReport(dataset, index) {
-  if (!canManageDataset(dataset)) return toast("Hanya Owner yang bisa edit laporan tersebut.");
+  if (!canManageDataset(dataset)) return toast("Role ini tidak punya akses edit laporan tersebut.");
   const row = state[dataset]?.[index];
   if (!row) return toast("Data laporan tidak ditemukan.");
   const fields = resolveEditableFields(dataset, row);
@@ -2575,7 +2652,7 @@ function bindOwnerNotes() {
         state[dataset][index].ownerNote = ownerNoteValue(inputEl.value);
         inputEl.value = state[dataset][index].ownerNote;
         saveState();
-        toast("Catatan Owner berhasil disimpan.");
+        toast(`${escalationNoteLabel()} berhasil disimpan.`);
       }
     });
   });
@@ -2586,8 +2663,7 @@ function canDelete(dataset) {
 }
 
 function canManageDataset(dataset) {
-  const managerMarketingDatasets = new Set(["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"]);
-  return (currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset)) || (currentRole === "Manager Marketing" && managerMarketingDatasets.has(dataset));
+  return (currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset)) || (currentRole === "Manager Finance & Operational" && dataset === "manager") || (currentRole === "Manager Marketing" && MANAGER_MARKETING_DATASETS.includes(dataset));
 }
 
 function renderCharts() {
@@ -2715,7 +2791,9 @@ function getKpis() {
   const treatmentCount = state.crm.filter(x => x.responseLead === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
   const managerCashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther");
   const managerCashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther");
-  const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + (managerCashIn || sum(state.manager, "dailyRevenue"));
+  const divisionOmzet = sum(state.marketing, "dailyOmzet") + sum(state.content, "dailyOmzet") + sum(state.crm, "dailyOmzet") + sum(state.doctor, "dailyOmzet") + sum(state.medis, "dailyOmzet") + sum(state.inventory, "dailyOmzet");
+  const divisionExpense = sum(state.marketing, "dailyExpense") + sum(state.content, "dailyExpense") + sum(state.crm, "dailyExpense") + sum(state.doctor, "dailyExpense") + sum(state.medis, "dailyExpense") + sum(state.inventory, "dailyExpense");
+  const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + divisionOmzet + (managerCashIn || sum(state.manager, "dailyRevenue"));
   const adSpend = sum(state.marketing, "spend") + sum(state.manager, "adSpend");
   const allRows = [...state.manager, ...state.marketing, ...state.crm, ...state.doctor, ...state.medis, ...state.inventory];
   const latestDate = latestIsoDate(allRows) || new Date().toISOString().slice(0, 10);
@@ -2724,7 +2802,7 @@ function getKpis() {
   const monthlyRevenue = revenueInMonth(monthPrefix);
   const monthlyTarget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget") || 300000000;
   const forecastRevenue = forecastMonth(monthlyRevenue, latestDate);
-  const expenses = (managerCashOut || (adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus")));
+  const expenses = (managerCashOut || (adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"))) + divisionExpense;
   const todayPatients = uniquePatientCount(latestDate);
   const stockCritical = state.inventory.filter(x => stockStatus(x) !== "Aman").length;
   const repeat = state.crm.filter(x => /data base|database|repeat/i.test(`${x.status} ${x.category} ${x.responseLead}`)).length;
@@ -2955,8 +3033,12 @@ function exportPdf(dataset) {
 }
 
 function getExportSections(dataset) {
+  if (dataset !== "owner" && dataset !== "all" && !canViewDataset(dataset)) {
+    toast("Role ini tidak punya akses export data tersebut.");
+    return [];
+  }
   if (dataset === "owner") return getOwnerExportSections();
-  const keys = dataset === "all" ? DATASET_KEYS : [dataset];
+  const keys = dataset === "all" ? getAccessibleReportDatasets() : [dataset];
   return keys.map(key => {
     const sourceRows = activePage === "reports" ? filterRowsByDate(state[key] || []) : (state[key] || []);
     const rows = sourceRows.map(normalizeRow);
@@ -3214,7 +3296,7 @@ function exportTitle(dataset) {
 
 function formatExportValue(key, value) {
   if (value === undefined || value === null) return "";
-  if (["revenue", "spend", "adSpend", "otherExpense", "productSalePrice", "patientTreatmentPrice", "dailyTarget", "dailyRevenue", "monthlyTarget", "totalRevenue", "teamBonus", "cpc", "cpl", "cpr", "upsales"].includes(key)) return money(num(value));
+  if (["revenue", "spend", "adSpend", "otherExpense", "productSalePrice", "patientTreatmentPrice", "dailyTarget", "dailyRevenue", "dailyOmzet", "dailyExpense", "monthlyTarget", "totalRevenue", "teamBonus", "cpc", "cpl", "cpr", "upsales"].includes(key)) return money(num(value));
   if (key === "ctr") return pct(num(value));
   if (key === "roas") return `${num(value).toFixed(1)}x`;
   if (key === "mediaLinks") return String(value).split(/\n|,\s*/).map(x => x.trim()).filter(Boolean).join(" | ");
@@ -3376,6 +3458,10 @@ function label(key, dataset = "") {
   const labels = {
     date: "Tanggal",
     managerName: "Nama Manager",
+    activityReport: "Ringkasan Aktivitas Harian",
+    dailyOmzet: "Omzet Harian",
+    dailyExpense: "Pengeluaran Harian",
+    performanceNote: "Catatan Kinerja Harian",
     annualBudget: "Anggaran Tahunan",
     monthlyBudget: "Anggaran Bulanan",
     cashInPatient: "Cash In - Pembayaran Pasien",
