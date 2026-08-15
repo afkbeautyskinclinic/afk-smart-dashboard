@@ -740,6 +740,7 @@ const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
 const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
 const REFRESH_RESTORE_KEY = "afkBeautyDashboard.refreshRestore.v1";
+const WINDOW_SESSION_PREFIX = "afkBeautyDashboard.windowSession:";
 const AUTH_SESSION_DAYS = 30;
 const REFRESH_RESTORE_WINDOW_MS = 45000;
 const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
@@ -1073,6 +1074,24 @@ function loadCurrentTabSession() {
   }
 }
 
+function loadWindowSession() {
+  try {
+    if (!String(window.name || "").startsWith(WINDOW_SESSION_PREFIX)) return null;
+    const session = JSON.parse(String(window.name).slice(WINDOW_SESSION_PREFIX.length));
+    if (!session || !session.authenticated || !session.role) return null;
+    const persistedSession = loadAuthSession();
+    if (!persistedSession || persistedSession.role !== normalizeRoleName(session.role)) return null;
+    return {
+      role: normalizeRoleName(session.role),
+      authenticated: true,
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role)
+    };
+  } catch {
+    window.name = "";
+    return null;
+  }
+}
+
 function loadRefreshRestoreSession() {
   try {
     const session = JSON.parse(localStorage.getItem(REFRESH_RESTORE_KEY) || "null");
@@ -1110,12 +1129,13 @@ function saveCurrentTabSession(role = currentRole, page = activePage) {
     activePage: isKnownPage(page) ? page : rolePage(role),
     savedAt: new Date().toISOString()
   };
+  window.name = `${WINDOW_SESSION_PREFIX}${JSON.stringify(session)}`;
   sessionStorage.setItem(TAB_SESSION_KEY, JSON.stringify(session));
 }
 
 function applyCurrentTabSession(targetState) {
   const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
-  const session = loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
+  const session = loadWindowSession() || loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
   targetState.session = session
     ? { role: session.role, authenticated: true, activePage: session.activePage }
     : { role: previousRole, authenticated: false, activePage: "" };
