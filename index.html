@@ -854,9 +854,9 @@ async function init() {
   registerServiceWorker();
   renderAll();
   cleanupRenderedPage();
+  if (!state.session.authenticated) openLogin(currentRole);
   await refreshFromBackendOnStart();
   cleanupRenderedPage();
-  if (!state.session.authenticated) openLogin(currentRole);
   initAutoSync();
 }
 
@@ -1029,16 +1029,26 @@ function loadAuthSession() {
       localStorage.removeItem(AUTH_SESSION_KEY);
       return null;
     }
-    return { role: normalizeRoleName(session.role), authenticated: true, expiresAt: Number(session.expiresAt) };
+    return {
+      role: normalizeRoleName(session.role),
+      authenticated: true,
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role),
+      expiresAt: Number(session.expiresAt)
+    };
   } catch {
     localStorage.removeItem(AUTH_SESSION_KEY);
     return null;
   }
 }
 
-function saveAuthSession(role) {
+function saveAuthSession(role, page = activePage) {
   const expiresAt = Date.now() + AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000;
-  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ role: normalizeRoleName(role), authenticated: true, expiresAt }));
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+    role: normalizeRoleName(role),
+    authenticated: true,
+    activePage: isKnownPage(page) ? page : rolePage(role),
+    expiresAt
+  }));
 }
 
 function loadCurrentTabSession() {
@@ -1062,6 +1072,7 @@ function loadCurrentTabSession() {
 }
 
 function saveCurrentTabSession(role = currentRole, page = activePage) {
+  saveAuthSession(role, page);
   const session = {
     role: normalizeRoleName(role),
     authenticated: true,
@@ -1073,7 +1084,7 @@ function saveCurrentTabSession(role = currentRole, page = activePage) {
 
 function applyCurrentTabSession(targetState) {
   const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
-  const session = loadCurrentTabSession();
+  const session = isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null;
   targetState.session = session
     ? { role: session.role, authenticated: true, activePage: session.activePage }
     : { role: previousRole, authenticated: false, activePage: "" };
@@ -1087,6 +1098,12 @@ function resolveInitialActivePage() {
 
 function isKnownPage(pageId) {
   return NAV.some(item => item.id === pageId);
+}
+
+function isReloadNavigation() {
+  const navEntry = performance.getEntriesByType?.("navigation")?.[0];
+  if (navEntry?.type) return navEntry.type === "reload";
+  return performance.navigation?.type === 1;
 }
 
 function initAutoSync() {
