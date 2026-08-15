@@ -1095,15 +1095,14 @@ function loadWindowSession() {
 
 function loadHashSession() {
   try {
-    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const raw = params.get(HASH_SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw);
-    if (!session || !session.authenticated || !session.role) return null;
+    const values = parseSimpleHash();
+    const role = roleFromToken(values.afkRole);
+    const activeHashPage = values.afkPage;
+    if (!role) return null;
     return {
-      role: normalizeRoleName(session.role),
+      role,
       authenticated: true,
-      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role)
+      activePage: isKnownPage(activeHashPage) ? activeHashPage : rolePage(role)
     };
   } catch {
     return null;
@@ -1111,13 +1110,44 @@ function loadHashSession() {
 }
 
 function saveHashSession(role = currentRole, page = activePage) {
-  const session = encodeURIComponent(JSON.stringify({
-    role: normalizeRoleName(role),
-    authenticated: true,
-    activePage: isKnownPage(page) ? page : rolePage(role)
-  }));
-  const nextUrl = `${window.location.pathname}${window.location.search}#${HASH_SESSION_KEY}=${session}`;
+  const nextUrl = `${window.location.pathname}${window.location.search}#afkRole=${roleToken(role)}&afkPage=${isKnownPage(page) ? page : rolePage(role)}`;
   window.history.replaceState(null, "", nextUrl);
+}
+
+function parseSimpleHash() {
+  return String(window.location.hash || "").replace(/^#/, "").split("&").reduce((acc, pair) => {
+    const [key, value = ""] = pair.split("=");
+    if (key) acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function roleToken(role) {
+  return {
+    Owner: "owner",
+    "Manager Finance & Operational": "manager-finops",
+    "Manager Marketing": "manager-marketing",
+    "Digital Marketing": "marketing",
+    "Creative Performance": "creative",
+    CRM: "crm",
+    Dokter: "doctor",
+    Medis: "medis",
+    Inventory: "inventory"
+  }[normalizeRoleName(role)] || "crm";
+}
+
+function roleFromToken(token) {
+  return {
+    owner: "Owner",
+    "manager-finops": "Manager Finance & Operational",
+    "manager-marketing": "Manager Marketing",
+    marketing: "Digital Marketing",
+    creative: "Creative Performance",
+    crm: "CRM",
+    doctor: "Dokter",
+    medis: "Medis",
+    inventory: "Inventory"
+  }[token] || "";
 }
 
 function loadRefreshRestoreSession() {
