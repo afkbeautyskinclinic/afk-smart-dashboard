@@ -741,6 +741,7 @@ const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
 const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
 const REFRESH_RESTORE_KEY = "afkBeautyDashboard.refreshRestore.v1";
 const WINDOW_SESSION_PREFIX = "afkBeautyDashboard.windowSession:";
+const HASH_SESSION_KEY = "afkSession";
 const AUTH_SESSION_DAYS = 30;
 const REFRESH_RESTORE_WINDOW_MS = 45000;
 const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
@@ -1092,6 +1093,35 @@ function loadWindowSession() {
   }
 }
 
+function loadHashSession() {
+  try {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const raw = params.get(HASH_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(decodeURIComponent(raw));
+    if (!session || !session.authenticated || !session.role) return null;
+    const persistedSession = loadAuthSession();
+    if (!persistedSession || persistedSession.role !== normalizeRoleName(session.role)) return null;
+    return {
+      role: normalizeRoleName(session.role),
+      authenticated: true,
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.role)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveHashSession(role = currentRole, page = activePage) {
+  const session = encodeURIComponent(JSON.stringify({
+    role: normalizeRoleName(role),
+    authenticated: true,
+    activePage: isKnownPage(page) ? page : rolePage(role)
+  }));
+  const nextUrl = `${window.location.pathname}${window.location.search}#${HASH_SESSION_KEY}=${session}`;
+  window.history.replaceState(null, "", nextUrl);
+}
+
 function loadRefreshRestoreSession() {
   try {
     const session = JSON.parse(localStorage.getItem(REFRESH_RESTORE_KEY) || "null");
@@ -1123,6 +1153,7 @@ function saveRefreshRestoreMarker() {
 
 function saveCurrentTabSession(role = currentRole, page = activePage) {
   saveAuthSession(role, page);
+  saveHashSession(role, page);
   const session = {
     role: normalizeRoleName(role),
     authenticated: true,
@@ -1135,7 +1166,7 @@ function saveCurrentTabSession(role = currentRole, page = activePage) {
 
 function applyCurrentTabSession(targetState) {
   const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
-  const session = loadWindowSession() || loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
+  const session = loadHashSession() || loadWindowSession() || loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
   targetState.session = session
     ? { role: session.role, authenticated: true, activePage: session.activePage }
     : { role: previousRole, authenticated: false, activePage: "" };
