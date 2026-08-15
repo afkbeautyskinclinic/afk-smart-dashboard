@@ -2355,6 +2355,7 @@ function resolveTableColumns(dataset, rawRows, dataRows, defaultColumns = []) {
 }
 
 function shouldKeepDefaultColumn(dataset, col, rows) {
+  if (dataset === "manager") return true;
   if (["ownerNote", "mediaLinks"].includes(col)) return true;
   if (dataset === "inventory" && ["finalStock", "stockStatus"].includes(col)) return true;
   return rows.some(row => row[col] !== undefined && row[col] !== "");
