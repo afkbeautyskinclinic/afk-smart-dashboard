@@ -313,6 +313,16 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
 }
 .password-toggle:hover { background: rgba(248, 24, 148, .08); color: var(--pink); }
 .modal-actions { display: flex; justify-content: end; gap: 10px; }
+.login-credit {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+  color: #8d7b89;
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0;
+}
 .edit-report-modal { max-width: 980px; width: calc(100% - 32px); }
 .edit-report-modal form { max-height: calc(100vh - 48px); overflow: auto; }
 .edit-report-modal .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -748,7 +758,7 @@ tbody tr:hover {
         <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
         <button class="primary-button" value="default">Masuk</button>
       </div>
-      <small>Password dan hak akses dapat diatur oleh Owner atau Inventory melalui menu Setting.</small>
+      <small class="login-credit">Developed by : Markaz Dakwah Digital</small>
     </form>
   </dialog>
 
