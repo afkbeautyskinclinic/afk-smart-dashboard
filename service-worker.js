@@ -1,6 +1,7 @@
-const CACHE_NAME = "afk-dashboard-v1.5.32";
+const CACHE_PREFIX = "afk-dashboard-";
+const CACHE_NAME = "afk-dashboard-v1.5.33";
 const APP_SHELL = [
-  "./manifest.webmanifest?v=1.5.32",
+  "./manifest.webmanifest?v=1.5.33",
   "./assets/icon-192.png",
   "./assets/icon-512.png"
 ];
@@ -15,7 +16,7 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key))
     ))
   );
   self.clients.claim();

@@ -738,9 +738,6 @@ tbody tr:hover {
           <option>Inventory</option>
         </select>
       </label>
-      <label class="login-field">Username
-        <input id="usernameInput" type="text" placeholder="Masukkan username" autocomplete="username" required>
-      </label>
       <label class="login-field">Password
         <span class="password-entry">
           <input id="passwordInput" type="password" placeholder="Masukkan password" autocomplete="current-password" required>
@@ -751,7 +748,7 @@ tbody tr:hover {
         <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
         <button class="primary-button" value="default">Masuk</button>
       </div>
-      <small>Username, password, dan hak akses dapat diatur oleh Owner atau Inventory melalui menu Setting.</small>
+      <small>Password dan hak akses dapat diatur oleh Owner atau Inventory melalui menu Setting.</small>
     </form>
   </dialog>
 
@@ -770,7 +767,8 @@ const WINDOW_SESSION_PREFIX = "afkBeautyDashboard.windowSession:";
 const HASH_SESSION_KEY = "afkSession";
 const AUTH_SESSION_DAYS = 30;
 const REFRESH_RESTORE_WINDOW_MS = 45000;
-const SETTINGS_REVISION = "2026-09-12-settings-access-control";
+const SETTINGS_REVISION = "2026-09-12-settings-access-control-v2";
+const APP_CACHE_PREFIX = "afk-dashboard-";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Manager Finance & Operational, Manager Marketing, Marketing Digital & Ads, Creative Performance, CRM, Dokter, Tim Medis, Inventory";
@@ -863,7 +861,6 @@ const els = {
   loginModal: document.getElementById("loginModal"),
   loginForm: document.getElementById("loginForm"),
   loginRoleSelect: document.getElementById("loginRoleSelect"),
-  usernameInput: document.getElementById("usernameInput"),
   passwordInput: document.getElementById("passwordInput"),
   togglePassword: document.getElementById("togglePassword"),
   cancelLogin: document.getElementById("cancelLogin"),
@@ -875,6 +872,7 @@ const els = {
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
+  clearOldAppCaches();
   restoreSessionFromHash();
   refreshLoginRoleOptions();
   els.roleSelect.value = currentRole;
@@ -888,6 +886,16 @@ async function init() {
   await refreshFromBackendOnStart();
   cleanupRenderedPage();
   initAutoSync();
+}
+
+async function clearOldAppCaches() {
+  if (!("caches" in window)) return;
+  try {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith(APP_CACHE_PREFIX)).map(key => caches.delete(key)));
+  } catch {
+    // Cache cleanup is best-effort; dashboard data stays in localStorage and Google Workspace.
+  }
 }
 
 function cleanupRenderedPage() {
@@ -1217,7 +1225,7 @@ function roleFromToken(token) {
     doctor: "Dokter",
     medis: "Medis",
     inventory: "Inventory"
-  }[token] || "";
+  }[String(token || "").toLowerCase()] || "";
 }
 
 function loadRefreshRestoreSession() {
@@ -1484,7 +1492,6 @@ function bindGlobalEvents() {
   els.loginRoleSelect.addEventListener("change", () => {
     const selectedRole = normalizeRoleName(els.loginRoleSelect.value);
     els.roleSelect.value = selectedRole;
-    els.usernameInput.value = getAccount(selectedRole)?.username || "";
   });
   els.togglePassword.addEventListener("click", () => {
     const visible = els.passwordInput.type === "text";
@@ -1577,7 +1584,6 @@ function openLogin(role) {
   const loginRequired = !state.session.authenticated;
   els.loginRoleSelect.value = selectedRole;
   els.roleSelect.value = selectedRole;
-  els.usernameInput.value = getAccount(selectedRole)?.username || "";
   els.passwordInput.value = "";
   els.passwordInput.type = "password";
   els.togglePassword.setAttribute("aria-label", "Tampilkan password");
@@ -1591,10 +1597,8 @@ function handleLogin(event) {
   event.preventDefault();
   const role = normalizeRoleName(els.loginRoleSelect.value);
   const account = getAccount(role);
-  const username = String(els.usernameInput.value || "").trim().toLowerCase();
-  const expectedUsername = String(account?.username || "").trim().toLowerCase();
-  if (!account || account.enabled === false || username !== expectedUsername || els.passwordInput.value !== account.password) {
-    toast("Username atau password role tidak sesuai.");
+  if (!account || account.enabled === false || els.passwordInput.value !== account.password) {
+    toast("Password role tidak sesuai.");
     return;
   }
   currentRole = role;
@@ -1697,9 +1701,30 @@ function rolePage(role) {
 }
 
 function normalizeRoleName(role) {
-  if (role === "Design Content") return "Creative Performance";
-  if (role === "Manager") return "Manager Finance & Operational";
-  return role;
+  const cleaned = String(role || "").trim();
+  const key = cleaned.toLowerCase();
+  const aliases = {
+    owner: "Owner",
+    manager: "Manager Finance & Operational",
+    "manager finance & operational": "Manager Finance & Operational",
+    "manager finance and operational": "Manager Finance & Operational",
+    "manager-finops": "Manager Finance & Operational",
+    "manager marketing": "Manager Marketing",
+    "manager-marketing": "Manager Marketing",
+    "digital marketing": "Digital Marketing",
+    "marketing digital & ads": "Digital Marketing",
+    marketing: "Digital Marketing",
+    "creative performance": "Creative Performance",
+    creative: "Creative Performance",
+    "design content": "Creative Performance",
+    crm: "CRM",
+    dokter: "Dokter",
+    doctor: "Dokter",
+    medis: "Medis",
+    "tim medis": "Medis",
+    inventory: "Inventory"
+  };
+  return aliases[key] || cleaned;
 }
 
 function canOwnerNote() {
@@ -2710,8 +2735,6 @@ function renderSettings() {
 
       <div class="form-actions">
         <button class="primary-button">Simpan Settings</button>
-        <button class="ghost-button" type="button" id="syncSheets">Sync Google Sheets</button>
-        <button class="ghost-button" type="button" id="fetchSheets">Ambil Data Sheets</button>
       </div>
     </form>
   `;
@@ -2754,14 +2777,6 @@ function renderSettings() {
     buildNavigation();
     renderAll();
     toast("Settings berhasil disimpan.");
-  });
-  document.getElementById("syncSheets").addEventListener("click", () => {
-    if (!confirm("Sync akan menulis data dashboard saat ini ke Google Sheets. Lanjutkan?")) return;
-    syncToGoogleSheets();
-  });
-  document.getElementById("fetchSheets").addEventListener("click", () => {
-    if (!confirm("Ambil Data Sheets akan mengganti data lokal browser dengan data dari Google Sheets. Lanjutkan?")) return;
-    fetchFromGoogleSheets();
   });
 }
 function formCard(id, title, section, fields) {
