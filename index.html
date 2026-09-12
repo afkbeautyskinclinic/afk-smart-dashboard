@@ -328,6 +328,29 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
   background: #fff;
   color: var(--ink);
 }
+.settings-section { margin-top: 18px; }
+.settings-table-wrap { overflow: auto; }
+.settings-table { min-width: 760px; }
+.settings-table input[type="text"],
+.settings-table input:not([type]),
+.settings-table input[type="password"] {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+}
+.settings-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--pink);
+}
+.access-matrix td:not(:first-child),
+.access-matrix th:not(:first-child) {
+  text-align: center;
+}
 .mobile-nav { display: none; }
 .empty-state { padding: 24px; color: var(--muted); text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
 
@@ -715,6 +738,9 @@ tbody tr:hover {
           <option>Inventory</option>
         </select>
       </label>
+      <label class="login-field">Username
+        <input id="usernameInput" type="text" placeholder="Masukkan username" autocomplete="username" required>
+      </label>
       <label class="login-field">Password
         <span class="password-entry">
           <input id="passwordInput" type="password" placeholder="Masukkan password" autocomplete="current-password" required>
@@ -725,7 +751,7 @@ tbody tr:hover {
         <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
         <button class="primary-button" value="default">Masuk</button>
       </div>
-      <small>Demo password: owner123, manager123, marketing123, design123, crm123, dokter123, medis123, inventory123</small>
+      <small>Username, password, dan hak akses dapat diatur oleh Owner atau Inventory melalui menu Setting.</small>
     </form>
   </dialog>
 
@@ -744,26 +770,25 @@ const WINDOW_SESSION_PREFIX = "afkBeautyDashboard.windowSession:";
 const HASH_SESSION_KEY = "afkSession";
 const AUTH_SESSION_DAYS = 30;
 const REFRESH_RESTORE_WINDOW_MS = 45000;
-const SETTINGS_REVISION = "2026-08-14-manager-marketing-control";
+const SETTINGS_REVISION = "2026-09-12-settings-access-control";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
 const DEFAULT_PIC_LIST = "Manager Finance & Operational, Manager Marketing, Marketing Digital & Ads, Creative Performance, CRM, Dokter, Tim Medis, Inventory";
 const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
 const DEFAULT_PRIMARY_COLOR = "#e81887";
-const PASSWORDS = {
-  Owner: "owner123",
-  Manager: "manager123",
-  "Manager Finance & Operational": "manager123",
-  "Manager Marketing": "managerMarketing123",
-  CRM: "crm123",
-  "Digital Marketing": "marketing123",
-  "Creative Performance": "design123",
-  "Design Content": "design123",
-  Dokter: "dokter123",
-  Medis: "medis123",
-  Inventory: "inventory123"
-};
+const ROLE_DEFINITIONS = [
+  { role: "Owner", username: "owner", password: "owner123", pages: ["owner","manager","managerMarketing","marketing","content","crm","doctor","medis","inventory","reports","settings"] },
+  { role: "Manager Finance & Operational", username: "manager", password: "manager123", pages: ["manager","marketing","content","crm","doctor","medis","inventory","reports"] },
+  { role: "Manager Marketing", username: "managerMarketing", password: "managerMarketing123", pages: ["managerMarketing","marketing","content","crm","doctor","medis","inventory","reports"] },
+  { role: "Digital Marketing", username: "marketing", password: "marketing123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Creative Performance", username: "creative", password: "design123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "CRM", username: "crm", password: "crm123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Dokter", username: "dokter", password: "dokter123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Medis", username: "medis", password: "medis123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Inventory", username: "inventory", password: "inventory123", pages: ["marketing","content","crm","doctor","medis","inventory","settings"] }
+];
+const SETTINGS_ROLES = new Set(["Owner", "Inventory"]);
 
 const NAV = [
   { id: "owner", label: "Owner", icon: "&#9813;", page: "ownerPage" },
@@ -775,7 +800,8 @@ const NAV = [
   { id: "doctor", label: "Dokter", icon: "&#9877;", page: "doctorPage" },
   { id: "medis", label: "Tim Medis", icon: "&#10010;", page: "medisPage" },
   { id: "inventory", label: "Inventory", icon: "&#9638;", page: "inventoryPage" },
-  { id: "reports", label: "Reports", icon: "&#9635;", page: "reportsPage" }
+  { id: "reports", label: "Reports", icon: "&#9635;", page: "reportsPage" },
+  { id: "settings", label: "Setting", icon: "&#9881;", page: "settingsPage" }
 ];
 
 let state = loadState();
@@ -837,6 +863,7 @@ const els = {
   loginModal: document.getElementById("loginModal"),
   loginForm: document.getElementById("loginForm"),
   loginRoleSelect: document.getElementById("loginRoleSelect"),
+  usernameInput: document.getElementById("usernameInput"),
   passwordInput: document.getElementById("passwordInput"),
   togglePassword: document.getElementById("togglePassword"),
   cancelLogin: document.getElementById("cancelLogin"),
@@ -849,6 +876,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   restoreSessionFromHash();
+  refreshLoginRoleOptions();
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
@@ -900,13 +928,19 @@ function defaultState() {
     session: { role: "Owner", authenticated: false },
     backendColumns: {},
     settings: {
+      clinicName: "AFK Beauty Skin Clinic",
+      clinicAddress: "",
+      clinicPhone: "",
+      clinicEmail: "",
+      clinicDescription: "Pusat kontrol operasional dan laporan realtime AFK Beauty Skin Clinic.",
       brandName: DEFAULT_DASHBOARD_NAME,
       primaryColor: DEFAULT_PRIMARY_COLOR,
       divisions: "Manager Finance & Operational, Manager Marketing, Digital Marketing, Creative Performance, CRM, Dokter, Medis, Inventory",
       pics: DEFAULT_PIC_LIST,
       treatments: DEFAULT_TREATMENT_LIST,
       sources: DEFAULT_SOURCE_LIST,
-      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp"
+      platforms: "Instagram, TikTok, Meta Ads, Google Ads, WhatsApp",
+      userAccounts: defaultUserAccounts()
     },
     manager: [],
     managerMarketingDaily: [],
@@ -920,6 +954,75 @@ function defaultState() {
     medis: [],
     inventory: []
   };
+}
+
+function defaultUserAccounts() {
+  return ROLE_DEFINITIONS.map(account => ({
+    role: account.role,
+    username: account.username,
+    password: account.password,
+    enabled: true,
+    pages: [...account.pages]
+  }));
+}
+
+function normalizeUserAccounts(accounts) {
+  const savedByRole = new Map((Array.isArray(accounts) ? accounts : []).map(account => [normalizeRoleName(account.role), account]));
+  return ROLE_DEFINITIONS.map(defaultAccount => {
+    const saved = savedByRole.get(defaultAccount.role) || {};
+    const rawPages = Array.isArray(saved.pages) ? saved.pages : defaultAccount.pages;
+    const pages = [...new Set(rawPages.map(String).filter(isKnownPage))];
+    const requiredPage = defaultAccount.role === "Owner" ? "owner" : rolePage(defaultAccount.role);
+    if (requiredPage && !pages.includes(requiredPage)) pages.push(requiredPage);
+    if (SETTINGS_ROLES.has(defaultAccount.role) && !pages.includes("settings")) pages.push("settings");
+    return {
+      role: defaultAccount.role,
+      username: String(saved.username || defaultAccount.username),
+      password: String(saved.password || defaultAccount.password),
+      enabled: defaultAccount.role === "Owner" ? true : saved.enabled !== false,
+      pages: pages.length ? pages : [...defaultAccount.pages]
+    };
+  });
+}
+
+function getUserAccounts() {
+  if (!state.settings) state.settings = defaultState().settings;
+  state.settings.userAccounts = normalizeUserAccounts(state.settings.userAccounts);
+  return state.settings.userAccounts;
+}
+
+function getAccount(role) {
+  const normalizedRole = normalizeRoleName(role);
+  return getUserAccounts().find(account => account.role === normalizedRole) || defaultUserAccounts().find(account => account.role === normalizedRole);
+}
+
+function roleOptionsHtml() {
+  return getUserAccounts()
+    .filter(account => account.enabled)
+    .map(account => `<option>${escapeHtml(account.role)}</option>`)
+    .join("");
+}
+
+function refreshLoginRoleOptions() {
+  const options = roleOptionsHtml();
+  const loginRole = normalizeRoleName(els.loginRoleSelect?.value || currentRole || "Owner");
+  const currentSelectRole = normalizeRoleName(els.roleSelect?.value || currentRole || "Owner");
+  if (els.loginRoleSelect) {
+    els.loginRoleSelect.innerHTML = options;
+    els.loginRoleSelect.value = getAccount(loginRole)?.enabled ? loginRole : "Owner";
+  }
+  if (els.roleSelect) {
+    els.roleSelect.innerHTML = options;
+    els.roleSelect.value = getAccount(currentSelectRole)?.enabled ? currentSelectRole : "Owner";
+  }
+}
+
+function pagesForRole(role) {
+  return getAccount(role)?.pages || ROLE_DEFINITIONS.find(account => account.role === normalizeRoleName(role))?.pages || [];
+}
+
+function isSettingsRole(role = currentRole) {
+  return SETTINGS_ROLES.has(normalizeRoleName(role));
 }
 
 function managerReport(date, managerName, annualBudget, monthlyBudget, cashInPatient, cashInOther, cashOutVendor, cashOutSalary, cashOutDoctorFee, cashOutOperational, cashOutOther, cashBalance, profitLoss, cashFlowNote = "", sopStatus = "Sesuai SOP", stockSkincareStatus = "Aman", stockMedicineStatus = "Aman", medicalToolStatus = "Siap Pakai", doctorScheduleStatus = "Aman", therapistScheduleStatus = "Aman", staffScheduleStatus = "Aman", patientComplaint = "", operationalIssue = "", actionTaken = "", followUpPlan = "", priority = "Medium", status = "Open", mediaLinks = "", ownerNote = "") {
@@ -1229,10 +1332,13 @@ function normalizeDashboardState(targetState) {
     ...(targetState.settings || {}),
     brandName: LEGACY_DASHBOARD_NAMES.has(targetState.settings?.brandName) || !targetState.settings?.brandName ? DEFAULT_DASHBOARD_NAME : targetState.settings.brandName,
     primaryColor: !targetState.settings?.primaryColor || targetState.settings.primaryColor.toLowerCase() === "#f81894" ? DEFAULT_PRIMARY_COLOR : targetState.settings.primaryColor,
-    pics: DEFAULT_PIC_LIST,
-    treatments: DEFAULT_TREATMENT_LIST,
-    sources: DEFAULT_SOURCE_LIST
+    clinicName: targetState.settings?.clinicName || "AFK Beauty Skin Clinic",
+    clinicDescription: targetState.settings?.clinicDescription || "Pusat kontrol operasional dan laporan realtime AFK Beauty Skin Clinic.",
+    pics: targetState.settings?.pics || DEFAULT_PIC_LIST,
+    treatments: targetState.settings?.treatments || DEFAULT_TREATMENT_LIST,
+    sources: targetState.settings?.sources || DEFAULT_SOURCE_LIST
   };
+  targetState.settings.userAccounts = normalizeUserAccounts(targetState.settings.userAccounts);
   delete targetState.settings.backendUrl;
   delete targetState.settings.backendToken;
   migrateTreatmentNames(targetState);
@@ -1376,7 +1482,9 @@ function migrateDivisionRows(targetState) {
 function bindGlobalEvents() {
   els.roleSelect.addEventListener("change", () => openLogin(els.roleSelect.value));
   els.loginRoleSelect.addEventListener("change", () => {
-    els.roleSelect.value = normalizeRoleName(els.loginRoleSelect.value);
+    const selectedRole = normalizeRoleName(els.loginRoleSelect.value);
+    els.roleSelect.value = selectedRole;
+    els.usernameInput.value = getAccount(selectedRole)?.username || "";
   });
   els.togglePassword.addEventListener("click", () => {
     const visible = els.passwordInput.type === "text";
@@ -1463,10 +1571,13 @@ function registerServiceWorker() {
 }
 
 function openLogin(role) {
-  const selectedRole = normalizeRoleName(role);
+  refreshLoginRoleOptions();
+  const requestedRole = normalizeRoleName(role);
+  const selectedRole = getAccount(requestedRole)?.enabled ? requestedRole : "Owner";
   const loginRequired = !state.session.authenticated;
   els.loginRoleSelect.value = selectedRole;
   els.roleSelect.value = selectedRole;
+  els.usernameInput.value = getAccount(selectedRole)?.username || "";
   els.passwordInput.value = "";
   els.passwordInput.type = "password";
   els.togglePassword.setAttribute("aria-label", "Tampilkan password");
@@ -1479,8 +1590,11 @@ function openLogin(role) {
 function handleLogin(event) {
   event.preventDefault();
   const role = normalizeRoleName(els.loginRoleSelect.value);
-  if (els.passwordInput.value !== PASSWORDS[role]) {
-    toast("Password role tidak sesuai.");
+  const account = getAccount(role);
+  const username = String(els.usernameInput.value || "").trim().toLowerCase();
+  const expectedUsername = String(account?.username || "").trim().toLowerCase();
+  if (!account || account.enabled === false || username !== expectedUsername || els.passwordInput.value !== account.password) {
+    toast("Username atau password role tidak sesuai.");
     return;
   }
   currentRole = role;
@@ -1505,7 +1619,7 @@ function buildNavigation() {
   const items = visibleNavItems();
   const navHtml = items.map(item => navButton(item)).join("");
   els.navList.innerHTML = navHtml;
-  els.mobileNav.innerHTML = items.filter(item => ["manager", "marketing", "crm", "doctor", "reports", "inventory"].includes(item.id)).slice(0, 4).map(item => navButton(item)).join("");
+  els.mobileNav.innerHTML = items.filter(item => ["manager", "managerMarketing", "marketing", "crm", "doctor", "reports", "inventory", "settings"].includes(item.id)).slice(0, 4).map(item => navButton(item)).join("");
   document.querySelectorAll("[data-nav]").forEach(button => {
     button.addEventListener("click", () => {
       if (button.classList.contains("disabled")) return toast("Menu ini hanya untuk Owner.");
@@ -1539,21 +1653,18 @@ function canAccessPage(pageId) {
 
 function canAccessPageForRole(pageId, role) {
   const normalizedRole = normalizeRoleName(role);
+  if (pageId === "settings") return isSettingsRole(normalizedRole);
+  const account = getAccount(normalizedRole);
+  if (account && account.enabled === false) return false;
+  if (account?.pages?.length) return account.pages.includes(pageId) || pageId === rolePage(normalizedRole);
   if (normalizedRole === "Owner") return true;
-  if (isManagerRole(normalizedRole)) {
-    if (pageId === "reports") return true;
-    if (normalizedRole === "Manager Finance & Operational" && pageId === "manager") return true;
-    if (normalizedRole === "Manager Marketing" && pageId === "managerMarketing") return true;
-    return isDivisionPage(pageId);
-  }
+  if (isManagerRole(normalizedRole)) return pageId === "reports" || pageId === rolePage(normalizedRole) || isDivisionPage(pageId);
   return isDivisionPage(pageId) || pageId === rolePage(normalizedRole);
 }
 
 function canViewDataset(dataset) {
-  if (currentRole === "Owner") return DATASET_KEYS.includes(dataset);
-  if (currentRole === "Manager Finance & Operational") return dataset === "manager" || DIVISION_DATASETS.includes(dataset);
-  if (currentRole === "Manager Marketing") return MANAGER_MARKETING_DATASETS.includes(dataset) || DIVISION_DATASETS.includes(dataset);
-  return DIVISION_DATASETS.includes(dataset);
+  const pageId = datasetPageId(dataset);
+  return pageId ? canAccessPage(pageId) : false;
 }
 
 function getAccessibleReportDatasets() {
@@ -1563,6 +1674,22 @@ function getAccessibleReportDatasets() {
 function canEdit(section) {
   const map = { manager: "Manager Finance & Operational", managerMarketingDaily: "Manager Marketing", patientCommand: "Manager Marketing", managerDecisionLog: "Manager Marketing", ownerEscalation: "Manager Marketing", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
   return currentRole === map[section];
+}
+
+function datasetPageId(dataset) {
+  return {
+    manager: "manager",
+    managerMarketingDaily: "managerMarketing",
+    patientCommand: "managerMarketing",
+    managerDecisionLog: "managerMarketing",
+    ownerEscalation: "managerMarketing",
+    marketing: "marketing",
+    content: "content",
+    crm: "crm",
+    doctor: "doctor",
+    medis: "medis",
+    inventory: "inventory"
+  }[dataset] || "";
 }
 
 function rolePage(role) {
@@ -2496,10 +2623,20 @@ function bindReportFilters() {
 }
 
 function renderSettings() {
+  const page = document.getElementById("settingsPage");
+  if (!isSettingsRole()) {
+    page.innerHTML = `
+      ${sectionHead("Setting", "Menu ini hanya dapat diakses oleh Owner dan Inventory.")}
+      <div class="empty-state">Silakan masuk sebagai Owner atau Inventory untuk mengatur akun, hak akses, dan profil klinik.</div>
+    `;
+    return;
+  }
   const backend = getBackendConfig();
   const syncStatus = getSyncStatus();
-  document.getElementById("settingsPage").innerHTML = `
-    ${sectionHead("Settings", "Konfigurasi bisnis khusus Owner. Pengaturan backend dikunci agar koneksi tidak rusak karena salah input.")}
+  const accounts = getUserAccounts();
+  const accessPages = NAV.filter(item => item.id !== "settings");
+  page.innerHTML = `
+    ${sectionHead("Setting", "Konfigurasi akun, hak akses, profil klinik, dan sinkronisasi backend.")}
     <div class="settings-card install-guide">
       <h2>Status Sistem</h2>
       <div class="three-col">
@@ -2509,24 +2646,68 @@ function renderSettings() {
         </div>
         <div>
           <strong>Sinkronisasi</strong>
-          <p>${syncStatus.pending ? "Ada perubahan menunggu sync" : "Tidak ada antrian sync"}</p>
+          <p>${syncStatus.pending ? "Ada perubahan menunggu sinkronisasi" : "Tidak ada antrian sinkronisasi"}</p>
         </div>
         <div>
-          <strong>Install</strong>
-          <p>Android: Chrome Add to Home Screen. iPhone: Safari Share lalu Add to Home Screen.</p>
+          <strong>Update Terakhir</strong>
+          <p>${escapeHtml(syncStatus.lastSuccessAt || syncStatus.lastFetchAt || "Belum ada catatan sync")}</p>
         </div>
       </div>
     </div>
     <form class="settings-card form-card" id="settingsForm">
+      <div class="section-head"><div><h2>Profil Klinik</h2><p>Identitas klinik yang tampil di aplikasi dan ikut tersimpan ke backend.</p></div></div>
       <div class="form-grid">
-        ${input("brandName", "Brand name", "text", state.settings.brandName)}
-        ${input("primaryColor", "Warna utama", "color", state.settings.primaryColor)}
-        ${textarea("divisions", "Nama divisi", state.settings.divisions)}
-        ${textarea("pics", "PIC list", state.settings.pics)}
-        ${textarea("treatments", "Treatment list", state.settings.treatments)}
-        ${textarea("sources", "Source lead list", state.settings.sources)}
-        ${textarea("platforms", "Platform list", state.settings.platforms)}
+        ${input("clinicName", "Nama Klinik", "text", state.settings.clinicName)}
+        ${input("brandName", "Nama Dashboard", "text", state.settings.brandName)}
+        ${input("primaryColor", "Warna Utama", "color", state.settings.primaryColor)}
+        ${input("clinicPhone", "Telepon Klinik", "text", state.settings.clinicPhone)}
+        ${input("clinicEmail", "Email Klinik", "email", state.settings.clinicEmail)}
+        ${textarea("clinicAddress", "Alamat Klinik", state.settings.clinicAddress)}
+        ${textarea("clinicDescription", "Deskripsi Klinik", state.settings.clinicDescription)}
       </div>
+
+      <div class="section-head settings-section"><div><h2>Referensi Operasional</h2><p>Daftar ini menjadi opsi dan acuan lintas dashboard.</p></div></div>
+      <div class="form-grid">
+        ${textarea("divisions", "Nama Divisi", state.settings.divisions)}
+        ${textarea("pics", "PIC List", state.settings.pics)}
+        ${textarea("treatments", "Treatment List", state.settings.treatments)}
+        ${textarea("sources", "Source Lead List", state.settings.sources)}
+        ${textarea("platforms", "Platform List", state.settings.platforms)}
+      </div>
+
+      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Atur username, password, status akun, dan akses menu setiap role.</p></div></div>
+      <div class="table-wrap settings-table-wrap">
+        <table class="settings-table">
+          <thead><tr><th>Role</th><th>Username</th><th>Password</th><th>Aktif</th></tr></thead>
+          <tbody>
+            ${accounts.map((account, index) => `
+              <tr>
+                <td><strong>${escapeHtml(account.role)}</strong></td>
+                <td><input name="account_${index}_username" value="${escapeHtml(account.username)}" autocomplete="off"></td>
+                <td><input name="account_${index}_password" value="${escapeHtml(account.password)}" autocomplete="new-password"></td>
+                <td><input name="account_${index}_enabled" type="checkbox" ${account.enabled ? "checked" : ""} ${account.role === "Owner" ? "disabled" : ""}></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-head settings-section"><div><h2>Hak Akses Menu</h2><p>Setting hanya bisa dibuka Owner dan Inventory. Role lain mengikuti centang menu di bawah ini.</p></div></div>
+      <div class="table-wrap settings-table-wrap access-matrix">
+        <table class="settings-table">
+          <thead><tr><th>Role</th>${accessPages.map(item => `<th>${escapeHtml(item.label)}</th>`).join("")}<th>Setting</th></tr></thead>
+          <tbody>
+            ${accounts.map((account, accountIndex) => `
+              <tr>
+                <td><strong>${escapeHtml(account.role)}</strong></td>
+                ${accessPages.map(item => `<td><input name="access_${accountIndex}_${item.id}" type="checkbox" ${account.pages.includes(item.id) ? "checked" : ""}></td>`).join("")}
+                <td><input type="checkbox" ${isSettingsRole(account.role) ? "checked" : ""} disabled></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+
       <div class="form-actions">
         <button class="primary-button">Simpan Settings</button>
         <button class="ghost-button" type="button" id="syncSheets">Sync Google Sheets</button>
@@ -2536,11 +2717,41 @@ function renderSettings() {
   `;
   document.getElementById("settingsForm").addEventListener("submit", event => {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const updatedAccounts = getUserAccounts().map((account, index) => {
+      const pages = accessPages
+        .filter(item => formData.get(`access_${index}_${item.id}`) === "on")
+        .map(item => item.id);
+      if (isSettingsRole(account.role) && !pages.includes("settings")) pages.push("settings");
+      return {
+        role: account.role,
+        username: String(formData.get(`account_${index}_username`) || account.username).trim() || account.username,
+        password: String(formData.get(`account_${index}_password`) || account.password),
+        enabled: account.role === "Owner" || formData.get(`account_${index}_enabled`) === "on",
+        pages
+      };
+    });
     state.settings = {
       ...state.settings,
-      ...Object.fromEntries(new FormData(event.currentTarget).entries())
+      clinicName: formData.get("clinicName"),
+      brandName: formData.get("brandName"),
+      primaryColor: formData.get("primaryColor"),
+      clinicPhone: formData.get("clinicPhone"),
+      clinicEmail: formData.get("clinicEmail"),
+      clinicAddress: formData.get("clinicAddress"),
+      clinicDescription: formData.get("clinicDescription"),
+      divisions: formData.get("divisions"),
+      pics: formData.get("pics"),
+      treatments: formData.get("treatments"),
+      sources: formData.get("sources"),
+      platforms: formData.get("platforms"),
+      userAccounts: normalizeUserAccounts(updatedAccounts)
     };
+    normalizeDashboardState(state);
+    refreshLoginRoleOptions();
+    if (!canAccessPage(activePage)) activePage = resolveInitialActivePage();
     saveState();
+    buildNavigation();
     renderAll();
     toast("Settings berhasil disimpan.");
   });
