@@ -770,6 +770,9 @@ const CONFIG = {
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
+const SYNC_QUEUE_KEY = "afkBeautyDashboard.syncQueue.v2";
+const DEVICE_ID_KEY = "afkBeautyDashboard.deviceId.v1";
+const SYNC_LOCK_KEY = "afkBeautyDashboard.syncLock.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
 const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
 const REFRESH_RESTORE_KEY = "afkBeautyDashboard.refreshRestore.v1";
@@ -778,6 +781,11 @@ const HASH_SESSION_KEY = "afkSession";
 const AUTH_SESSION_DAYS = 30;
 const REFRESH_RESTORE_WINDOW_MS = 45000;
 const SETTINGS_REVISION = "2026-09-12-settings-access-control-v2";
+const SYNC_SCHEMA_VERSION = 2;
+const SYNC_BATCH_SIZE = 20;
+const SYNC_BASE_RETRY_MS = 3500;
+const SYNC_MAX_RETRY_MS = 120000;
+const SYNC_LOCK_TTL_MS = 55000;
 const APP_CACHE_PREFIX = "afk-dashboard-";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
@@ -821,6 +829,7 @@ let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
 let autoSyncTimer = null;
 let autoSyncPaused = false;
+let syncInProgress = false;
 let searchRenderTimer = null;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
@@ -843,7 +852,7 @@ const EDITABLE_REPORT_FIELDS = {
 const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired","targetDate","deadline"]);
 const TEXTAREA_REPORT_FIELDS = new Set(["address","note","activityReport","performanceNote","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
-const INTERNAL_FIELDS = new Set(["__index"]);
+const INTERNAL_FIELDS = new Set(["__index", "__readonly", "_syncId", "_createdAt", "_updatedAt"]);
 const COMPUTED_FIELDS = new Set(["finalStock","stockStatus","cpl","cpc","cpr","ctr","frequency","roas"]);
 const chartDepthPlugin = {
   id: "chartDepthPlugin",
@@ -1098,9 +1107,84 @@ function loadState() {
   }
 }
 
-function saveState() {
+function saveState(options = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  scheduleAutoSync();
+  if (!options.skipSync) scheduleAutoSync();
+}
+
+function getDeviceId() {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId = `afk-device-${randomId()}`;
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+function randomId() {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function getMutationQueue() {
+  try {
+    const queue = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]");
+    return Array.isArray(queue) ? queue : [];
+  } catch {
+    return [];
+  }
+}
+
+function setMutationQueue(queue) {
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+  setSyncStatus({ queueLength: queue.length, pending: queue.length > 0 });
+}
+
+function ensureRecordIdentity(row, dataset) {
+  if (!row || typeof row !== "object") return "";
+  if (!row._syncId) row._syncId = `${dataset}-${getDeviceId()}-${randomId()}`;
+  if (!row._createdAt) row._createdAt = new Date().toISOString();
+  row._updatedAt = new Date().toISOString();
+  return row._syncId;
+}
+
+function syncSafeRow(row) {
+  return Object.entries(row || {}).reduce((acc, [key, value]) => {
+    if (key === "__index" || key === "__readonly") return acc;
+    acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function enqueueSyncMutation(dataset, type, row = {}, previousRow = null) {
+  if (autoSyncPaused) return null;
+  const safeRow = syncSafeRow(row);
+  const rowId = safeRow._syncId || previousRow?._syncId || `${dataset}-${getDeviceId()}-${randomId()}`;
+  safeRow._syncId = rowId;
+  const mutation = {
+    id: `mutation-${getDeviceId()}-${randomId()}`,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    dataset,
+    type,
+    rowId,
+    row: safeRow,
+    previousRow: previousRow ? syncSafeRow(previousRow) : null,
+    actorRole: currentRole,
+    deviceId: getDeviceId(),
+    clientTime: new Date().toISOString(),
+    attempt: 0,
+    nextAttemptAt: 0
+  };
+  const queue = getMutationQueue();
+  queue.push(mutation);
+  setMutationQueue(queue.slice(-600));
+  scheduleAutoSync(500 + Math.floor(Math.random() * 900));
+  return mutation;
+}
+
+function enqueueLocalUpsert(dataset, row) {
+  ensureRecordIdentity(row, dataset);
+  return enqueueSyncMutation(dataset, "upsert", row);
 }
 
 function loadAuthSession() {
@@ -1319,9 +1403,13 @@ function scheduleAutoSync(delay = 1400) {
   if (autoSyncPaused) return;
   const backend = getBackendConfig();
   if (!backend.url || !backend.token) return;
-  setSyncStatus({ pending: true, lastQueuedAt: new Date().toISOString() });
+  const queue = getMutationQueue();
+  const nextRetryAt = Number(getSyncStatus().nextRetryAt || 0);
+  const waitForRetry = nextRetryAt > Date.now() ? nextRetryAt - Date.now() : 0;
+  if (!queue.length && delay < 1000) return;
+  setSyncStatus({ pending: queue.length > 0, queueLength: queue.length, lastQueuedAt: new Date().toISOString() });
   clearTimeout(autoSyncTimer);
-  autoSyncTimer = setTimeout(() => syncToGoogleSheets({ silent: true, source: "auto" }), delay);
+  autoSyncTimer = setTimeout(() => syncToGoogleSheets({ silent: true, source: "auto" }), Math.max(delay, waitForRetry));
 }
 
 function getSyncStatus() {
@@ -1953,7 +2041,9 @@ function managerForm() {
 async function addManager(data, fileFields = {}) {
   ["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "manager", data);
-  state.manager.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.manager.unshift(row);
+  enqueueLocalUpsert("manager", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan Manager Finance & Operational dan media Drive berhasil ditambahkan." : "Laporan Manager Finance & Operational berhasil ditambahkan.");
@@ -2063,28 +2153,36 @@ function ownerEscalationForm() {
 }
 
 async function addManagerMarketingDaily(data) {
-  state.managerMarketingDaily.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.managerMarketingDaily.unshift(row);
+  enqueueLocalUpsert("managerMarketingDaily", row);
   saveState();
   renderAll();
   toast("Daily Manager Report berhasil ditambahkan.");
 }
 
 async function addPatientCommand(data) {
-  state.patientCommand.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.patientCommand.unshift(row);
+  enqueueLocalUpsert("patientCommand", row);
   saveState();
   renderAll();
   toast("Patient Command berhasil ditambahkan.");
 }
 
 async function addManagerDecision(data) {
-  state.managerDecisionLog.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.managerDecisionLog.unshift(row);
+  enqueueLocalUpsert("managerDecisionLog", row);
   saveState();
   renderAll();
   toast("Decision Log berhasil ditambahkan.");
 }
 
 async function addOwnerEscalation(data) {
-  state.ownerEscalation.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.ownerEscalation.unshift(row);
+  enqueueLocalUpsert("ownerEscalation", row);
   saveState();
   renderAll();
   toast("Owner Escalation berhasil ditambahkan.");
@@ -2206,7 +2304,9 @@ async function addCrm(data, fileFields = {}) {
   data.upSellingCrossSelling = data.upSellingCrossSelling || "";
   data.voiceOfPatient = data.voiceOfPatient || data.note || "";
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "crm", data);
-  state.crm.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.crm.unshift(row);
+  enqueueLocalUpsert("crm", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Lead CRM dan media Drive berhasil ditambahkan." : "Lead CRM berhasil ditambahkan.");
@@ -2279,7 +2379,9 @@ async function addMarketing(data, fileFields = {}) {
   data.frequency = data.frequency || safeDiv(data.impressions, data.reach);
   data.roas = data.roas || safeDiv(data.revenue, data.spend);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "marketing", data);
-  state.marketing.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.marketing.unshift(row);
+  enqueueLocalUpsert("marketing", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan marketing dan media Drive berhasil ditambahkan." : "Laporan marketing berhasil ditambahkan.");
@@ -2336,7 +2438,9 @@ function contentForm() {
 async function addContent(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","views","reach","likes","comments","shares","saves","leads"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "content", data);
-  state.content.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.content.unshift(row);
+  enqueueLocalUpsert("content", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Konten dan media Drive berhasil ditambahkan." : "Konten berhasil ditambahkan.");
@@ -2387,7 +2491,9 @@ async function addDoctor(data, fileFields = {}) {
   data.dailyOmzet = num(data.dailyOmzet);
   data.dailyExpense = num(data.dailyExpense);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "doctor", data);
-  state.doctor.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.doctor.unshift(row);
+  enqueueLocalUpsert("doctor", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan dokter dan media Drive berhasil ditambahkan." : "Laporan dokter berhasil ditambahkan.");
@@ -2448,7 +2554,9 @@ async function addMedis(data, fileFields = {}) {
     const uploadedFiles = await uploadTreatmentMedia(mediaFiles, data, "medis");
     data.mediaLinks = uploadedFiles.map(file => file.url).filter(Boolean).join("\n");
   }
-  state.medis.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.medis.unshift(row);
+  enqueueLocalUpsert("medis", row);
   saveState();
   renderAll();
   toast(mediaFiles.length ? "Laporan medis dan media Drive berhasil ditambahkan." : "Laporan medis berhasil ditambahkan.");
@@ -2547,7 +2655,9 @@ function inventoryForm() {
 async function addInventory(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","initial","inQty","outQty","minimum"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "inventory", data);
-  state.inventory.unshift({ ...data, ownerNote: "" });
+  const row = { ...data, ownerNote: "" };
+  state.inventory.unshift(row);
+  enqueueLocalUpsert("inventory", row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Data inventory dan media Drive berhasil ditambahkan." : "Data inventory berhasil ditambahkan.");
@@ -2681,7 +2791,7 @@ function renderSettings() {
         </div>
         <div>
           <strong>Sinkronisasi</strong>
-          <p>${syncStatus.pending ? "Ada perubahan menunggu sinkronisasi" : "Tidak ada antrian sinkronisasi"}</p>
+          <p>${syncStatus.pending ? `${formatNumber(syncStatus.queueLength || getMutationQueue().length)} perubahan menunggu sync` : "Tidak ada antrian sinkronisasi"}</p>
         </div>
         <div>
           <strong>Update Terakhir</strong>
@@ -2783,6 +2893,7 @@ function renderSettings() {
     normalizeDashboardState(state);
     refreshLoginRoleOptions();
     if (!canAccessPage(activePage)) activePage = resolveInitialActivePage();
+    enqueueSyncMutation("settings", "settingsUpdate", settingsForSync());
     saveState();
     buildNavigation();
     renderAll();
@@ -2948,6 +3059,11 @@ function bindDeletes() {
       const index = Number(button.dataset.index);
       if (!canDelete(dataset)) return toast("Role ini tidak punya akses hapus data tersebut.");
       if (!confirm("Yakin ingin menghapus data ini? Perubahan akan ikut tersinkron ke backend.")) return;
+      const previousRow = state[dataset]?.[index];
+      if (previousRow) {
+        ensureRecordIdentity(previousRow, dataset);
+        enqueueSyncMutation(dataset, "delete", previousRow, previousRow);
+      }
       if (state[dataset]) state[dataset].splice(index, 1);
       saveState();
       renderAll();
@@ -2990,11 +3106,15 @@ function openEditReport(dataset, index) {
   modal.querySelector("#cancelEditReport").addEventListener("click", () => modal.close());
   form.addEventListener("submit", event => {
     event.preventDefault();
-    const nextRow = { ...state[dataset][index] };
+    const previousRow = { ...state[dataset][index] };
+    ensureRecordIdentity(previousRow, dataset);
+    const nextRow = { ...state[dataset][index], _syncId: previousRow._syncId, _createdAt: previousRow._createdAt };
     new FormData(form).forEach((value, key) => {
       nextRow[key] = normalizeEditValue(key, value);
     });
+    ensureRecordIdentity(nextRow, dataset);
     state[dataset][index] = nextRow;
+    enqueueSyncMutation(dataset, "update", nextRow, previousRow);
     saveState();
     modal.close();
     renderAll();
@@ -3053,8 +3173,12 @@ function bindOwnerNotes() {
       const dataset = inputEl.dataset.noteDataset;
       const index = Number(inputEl.dataset.index);
       if (state[dataset] && state[dataset][index]) {
+        const previousRow = { ...state[dataset][index] };
+        ensureRecordIdentity(previousRow, dataset);
         state[dataset][index].ownerNote = ownerNoteValue(inputEl.value);
+        ensureRecordIdentity(state[dataset][index], dataset);
         inputEl.value = state[dataset][index].ownerNote;
+        enqueueSyncMutation(dataset, "update", state[dataset][index], previousRow);
         saveState();
         toast(`${escalationNoteLabel()} berhasil disimpan.`);
       }
@@ -3742,12 +3866,17 @@ async function syncToGoogleSheets(options = {}) {
     return false;
   }
 
+  const queue = getMutationQueue();
+  if (queue.length) return flushMutationQueue(options);
+  if (options.source === "auto") return true;
+
   try {
-    const response = await fetch(backend.url, {
+    const response = await fetchWithTimeout(backend.url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "sync",
+        requestId: `full-sync-${getDeviceId()}-${randomId()}`,
         token: backend.token,
         columns: collectAllDatasetColumns(),
         data: {
@@ -3765,10 +3894,10 @@ async function syncToGoogleSheets(options = {}) {
           settings: settingsForSync()
         }
       })
-    });
+    }, 45000);
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Sync gagal.");
-    setSyncStatus({ pending: false, lastSuccessAt: new Date().toISOString(), lastError: "" });
+    setSyncStatus({ pending: false, queueLength: 0, lastSuccessAt: new Date().toISOString(), lastError: "", retryCount: 0, nextRetryAt: 0 });
     if (!options.silent) toast("Data berhasil disinkronkan ke Google Sheets.");
     return true;
   } catch (error) {
@@ -3778,10 +3907,134 @@ async function syncToGoogleSheets(options = {}) {
   }
 }
 
+async function flushMutationQueue(options = {}) {
+  const backend = getBackendConfig();
+  if (syncInProgress) return false;
+  if (!navigator.onLine) {
+    setSyncStatus({ pending: true, lastError: "Perangkat offline. Data tetap aman di antrean lokal.", queueLength: getMutationQueue().length });
+    return false;
+  }
+  if (!acquireSyncLock()) return false;
+  syncInProgress = true;
+
+  const queue = getMutationQueue();
+  const now = Date.now();
+  const ready = queue.filter(item => Number(item.nextAttemptAt || 0) <= now).slice(0, SYNC_BATCH_SIZE);
+  if (!ready.length) {
+    releaseSyncLock();
+    syncInProgress = false;
+    scheduleAutoSync(2500);
+    return false;
+  }
+
+  try {
+    const response = await fetchWithTimeout(backend.url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "syncMutations",
+        token: backend.token,
+        schemaVersion: SYNC_SCHEMA_VERSION,
+        requestId: `batch-${getDeviceId()}-${randomId()}`,
+        deviceId: getDeviceId(),
+        columns: collectAllDatasetColumns(),
+        mutations: ready.map(({ attempt, nextAttemptAt, ...mutation }) => mutation)
+      })
+    }, 45000);
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || "Sync mutation gagal.");
+    const acceptedIds = new Set(result.acceptedIds || ready.map(item => item.id));
+    const remaining = getMutationQueue().filter(item => !acceptedIds.has(item.id));
+    setMutationQueue(remaining);
+    setSyncStatus({
+      pending: remaining.length > 0,
+      queueLength: remaining.length,
+      lastSuccessAt: new Date().toISOString(),
+      lastError: "",
+      retryCount: 0,
+      nextRetryAt: 0,
+      lastBatchSize: ready.length
+    });
+    if (remaining.length) scheduleAutoSync(800 + Math.floor(Math.random() * 1200));
+    if (!options.silent) toast("Data berhasil dikirim ke backend.");
+    return true;
+  } catch (error) {
+    const failedIds = new Set(ready.map(item => item.id));
+    const retryAt = Date.now() + retryDelayFor(ready);
+    const updatedQueue = getMutationQueue().map(item => failedIds.has(item.id)
+      ? { ...item, attempt: Number(item.attempt || 0) + 1, nextAttemptAt: retryAt, lastError: error.message }
+      : item
+    );
+    setMutationQueue(updatedQueue);
+    setSyncStatus({
+      pending: true,
+      queueLength: updatedQueue.length,
+      lastError: error.message,
+      lastFailedAt: new Date().toISOString(),
+      retryCount: Math.max(...ready.map(item => Number(item.attempt || 0) + 1)),
+      nextRetryAt: retryAt
+    });
+    scheduleAutoSync(retryAt - Date.now());
+    if (!options.silent) toast(`Sync Google Sheets gagal, data tetap aman di antrean: ${error.message}`);
+    return false;
+  } finally {
+    syncInProgress = false;
+    releaseSyncLock();
+  }
+}
+
+function retryDelayFor(batch) {
+  const maxAttempt = Math.max(0, ...batch.map(item => Number(item.attempt || 0)));
+  const exponential = Math.min(SYNC_MAX_RETRY_MS, SYNC_BASE_RETRY_MS * (2 ** maxAttempt));
+  const jitter = Math.floor(Math.random() * SYNC_BASE_RETRY_MS * 3);
+  return exponential + jitter;
+}
+
+function acquireSyncLock() {
+  const now = Date.now();
+  try {
+    const lock = JSON.parse(localStorage.getItem(SYNC_LOCK_KEY) || "null");
+    if (lock && lock.expiresAt > now && lock.deviceId !== getDeviceId()) return false;
+  } catch {}
+  localStorage.setItem(SYNC_LOCK_KEY, JSON.stringify({
+    deviceId: getDeviceId(),
+    acquiredAt: now,
+    expiresAt: now + SYNC_LOCK_TTL_MS
+  }));
+  return true;
+}
+
+function releaseSyncLock() {
+  try {
+    const lock = JSON.parse(localStorage.getItem(SYNC_LOCK_KEY) || "null");
+    if (!lock || lock.deviceId === getDeviceId()) localStorage.removeItem(SYNC_LOCK_KEY);
+  } catch {
+    localStorage.removeItem(SYNC_LOCK_KEY);
+  }
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 async function fetchFromGoogleSheets(options = {}) {
   const backend = getBackendConfig();
   if (!backend.url) {
     if (!options.silent) toast("Isi Google Apps Script Web App URL di Settings untuk mengambil data.");
+    return null;
+  }
+  const pendingQueue = getMutationQueue();
+  if (pendingQueue.length && options.source === "startup") {
+    setSyncStatus({
+      pending: true,
+      queueLength: pendingQueue.length,
+      lastError: "",
+      lastFetchSkippedAt: new Date().toISOString()
+    });
+    scheduleAutoSync(700);
     return null;
   }
 
