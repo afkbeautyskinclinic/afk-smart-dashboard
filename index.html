@@ -858,11 +858,26 @@ let autoSyncPaused = false;
 let syncInProgress = false;
 let searchRenderTimer = null;
 let loginInProgress = false;
+let secureFetchInProgress = false;
+const pendingSecureFetchDatasets = new Set();
 const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const DATASET_KEYS = ["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"];
 const DIVISION_DATASETS = ["marketing", "content", "crm", "doctor", "medis", "inventory"];
 const MANAGER_MARKETING_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
+const PAGE_DATASET_MAP = {
+  owner: DATASET_KEYS,
+  manager: ["manager", "inventory", "doctor", "medis"],
+  managerMarketing: ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm"],
+  marketing: ["marketing"],
+  content: ["content"],
+  crm: ["crm"],
+  doctor: ["doctor"],
+  medis: ["medis"],
+  inventory: ["inventory"],
+  reports: DATASET_KEYS,
+  settings: ["inventory"]
+};
 const EDITABLE_REPORT_FIELDS = {
   manager: ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"],
   managerMarketingDaily: ["date","managerName","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","status","ownerNote"],
@@ -933,8 +948,7 @@ async function init() {
   renderAll();
   cleanupRenderedPage();
   if (!state.session.authenticated) openLogin(currentRole);
-  await refreshFromBackendOnStart();
-  cleanupRenderedPage();
+  else startBackgroundDataLoad({ source: "startup" });
   initAutoSync();
 }
 
@@ -1487,11 +1501,37 @@ function initAutoSync() {
   clearTimeout(autoSyncTimer);
 }
 
-async function refreshFromBackendOnStart() {
-  const backend = getBackendConfig();
-  if (!backend.url) return null;
-  if (CONFIG.BACKEND_AUTH_REQUIRED && !getBackendSessionToken()) return null;
-  return fetchFromGoogleSheets({ silent: true, source: "startup" });
+function datasetsForPage(pageId = activePage) {
+  const mapped = PAGE_DATASET_MAP[pageId] || [];
+  return [...new Set(mapped.filter(dataset => DATASET_KEYS.includes(dataset) && canViewDataset(dataset)))];
+}
+
+function startBackgroundDataLoad(options = {}) {
+  const datasets = options.datasets || datasetsForPage(activePage);
+  if (!datasets.length) return;
+  if (secureFetchInProgress) {
+    datasets.forEach(dataset => pendingSecureFetchDatasets.add(dataset));
+    return;
+  }
+  secureFetchInProgress = true;
+  setSyncStatus({
+    dataLoading: true,
+    lastFetchStartedAt: new Date().toISOString(),
+    lastFetchSource: options.source || "background"
+  });
+  fetchFromGoogleSheets({
+    silent: true,
+    source: options.source || "background",
+    datasets
+  }).finally(() => {
+    secureFetchInProgress = false;
+    setSyncStatus({ dataLoading: false });
+    if (pendingSecureFetchDatasets.size) {
+      const pendingDatasets = [...pendingSecureFetchDatasets];
+      pendingSecureFetchDatasets.clear();
+      startBackgroundDataLoad({ source: "queued", datasets: pendingDatasets });
+    }
+  });
 }
 
 async function validateBackendSessionOnStart() {
@@ -1936,6 +1976,7 @@ async function handleLogin(event) {
   try {
     renderAll();
     els.loginModal.close();
+    startBackgroundDataLoad({ source: "post-login", datasets: datasetsForPage(activePage) });
     reportLoginTiming({
       role: authenticatedRole,
       loginResponseMs: loginTiming?.loginResponseMs,
@@ -1993,6 +2034,9 @@ function buildNavigation() {
       if (state.session.authenticated) saveCurrentTabSession(currentRole, activePage);
       els.sidebar.classList.remove("open");
       renderAll();
+      if (state.session.authenticated) {
+        startBackgroundDataLoad({ source: "navigation", datasets: datasetsForPage(activePage) });
+      }
     });
   });
 }
@@ -2103,22 +2147,31 @@ function escalationNoteLabel() {
 }
 
 function renderAll() {
+  if (!canAccessPage(activePage)) activePage = rolePage(currentRole);
   applyBrandSettings();
   renderShell();
-  renderOwner();
-  renderManager();
-  renderManagerMarketing();
-  renderMarketing();
-  renderContent();
-  renderCrm();
-  renderDoctor();
-  renderMedis();
-  renderInventory();
-  renderReports();
-  renderSettings();
+  renderPageContent(activePage);
   renderActivePage();
   renderCharts();
   cleanupRenderedPage();
+}
+
+function renderPageContent(pageId) {
+  const renderers = {
+    owner: renderOwner,
+    manager: renderManager,
+    managerMarketing: renderManagerMarketing,
+    marketing: renderMarketing,
+    content: renderContent,
+    crm: renderCrm,
+    doctor: renderDoctor,
+    medis: renderMedis,
+    inventory: renderInventory,
+    reports: renderReports,
+    settings: renderSettings
+  };
+  const render = renderers[pageId] || renderers[rolePage(currentRole)] || renderCrm;
+  render();
 }
 
 function renderShell() {
@@ -4315,11 +4368,14 @@ async function fetchFromGoogleSheets(options = {}) {
     return null;
   }
 
+  const fetchStartedAt = performance.now();
   try {
     const url = new URL(backend.url);
     url.searchParams.set("action", sessionToken ? "secureFetch" : "fetch");
     if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) url.searchParams.set("token", backend.token);
     if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
+    const requestedDatasets = [...new Set((options.datasets || []).filter(dataset => DATASET_KEYS.includes(dataset)))];
+    if (requestedDatasets.length) url.searchParams.set("datasets", requestedDatasets.join(","));
     url.searchParams.set("_", Date.now().toString());
 
     const response = await fetch(url.toString(), { cache: "no-store" });
@@ -4339,7 +4395,21 @@ async function fetchFromGoogleSheets(options = {}) {
     autoSyncPaused = true;
     saveState();
     autoSyncPaused = false;
-    setSyncStatus({ pending: false, lastFetchAt: new Date().toISOString(), lastError: "" });
+    const totalFetchMs = Math.round(performance.now() - fetchStartedAt);
+    setSyncStatus({
+      pending: false,
+      lastFetchAt: new Date().toISOString(),
+      lastFetchMs: totalFetchMs,
+      lastFetchDatasets: requestedDatasets,
+      backendFetchTiming: result.timing || null,
+      lastError: ""
+    });
+    console.info("AFK secure fetch timing", {
+      source: options.source || "manual",
+      datasets: requestedDatasets,
+      totalFetchMs,
+      backendTiming: result.timing || null
+    });
     renderAll();
     if (!options.silent) toast("Data berhasil diambil dari Google Sheets.");
     return result.data;
