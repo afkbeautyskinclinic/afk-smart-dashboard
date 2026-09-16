@@ -4,3 +4,6 @@ afk-auth-test-server.js
 afk-auth-test-server.ps1
 apps-script-real-auth-test-page.gs
 apps-script-auth-foundation.gs
+apps-script-code.gs
+apps-script-concurrent-sync-test.gs
+apps-script-progressive-fetch.gs

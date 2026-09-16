@@ -684,6 +684,7 @@ tbody tr:hover {
         <span class="sync-dot"></span>
         <div>
           <strong>Mode Realtime Active</strong>
+          <small id="syncQueueStatus">Tersinkron</small>
           <small>(Developed by Markaz Dakwah Digital)</small>
         </div>
       </div>
@@ -797,6 +798,8 @@ const CONFIG = {
 const STORAGE_KEY = "afkBeautyDashboard.v1";
 const SYNC_STATUS_KEY = "afkBeautyDashboard.syncStatus.v1";
 const SYNC_QUEUE_KEY = "afkBeautyDashboard.syncQueue.v2";
+const SYNC_DEAD_LETTER_KEY = "afkBeautyDashboard.syncDeadLetter.v1";
+const SYNC_CHANNEL_NAME = "afkBeautyDashboard.syncChannel.v1";
 const DEVICE_ID_KEY = "afkBeautyDashboard.deviceId.v1";
 const SYNC_LOCK_KEY = "afkBeautyDashboard.syncLock.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
@@ -857,10 +860,13 @@ let pdfExportInProgress = false;
 let autoSyncTimer = null;
 let autoSyncPaused = false;
 let syncInProgress = false;
+let syncChannel = null;
+const localPendingMutations = new Map();
 let searchRenderTimer = null;
 let loginInProgress = false;
 let secureFetchInProgress = false;
 let datasetSessionGeneration = 0;
+const TAB_SYNC_INSTANCE_ID = `afk-tab-${randomId()}`;
 const pendingSecureFetchDatasets = new Set();
 const datasetLoadState = new Map();
 const OWNER_TIER_1_DATASETS = ["manager", "marketing", "crm"];
@@ -868,7 +874,7 @@ const OWNER_TIER_2_OPERATIONAL_DATASETS = ["content", "doctor", "medis", "invent
 const OWNER_TIER_2_CONTROL_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const PAGE_PROGRESSIVE_TIERS = {
   owner: [OWNER_TIER_1_DATASETS, OWNER_TIER_2_OPERATIONAL_DATASETS, OWNER_TIER_2_CONTROL_DATASETS],
-  manager: [["manager"], ["inventory", "doctor", "medis"]],
+  manager: [["manager"], ["inventory", "doctor", "medis", "ownerEscalation"]],
   managerMarketing: [["managerMarketingDaily", "marketing", "crm"], ["content", "patientCommand", "managerDecisionLog", "ownerEscalation"]],
   marketing: [["marketing"]],
   content: [["content"]],
@@ -885,7 +891,7 @@ const DIVISION_DATASETS = ["marketing", "content", "crm", "doctor", "medis", "in
 const MANAGER_MARKETING_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const PAGE_DATASET_MAP = {
   owner: OWNER_TIER_1_DATASETS,
-  manager: ["manager", "inventory", "doctor", "medis"],
+  manager: ["manager", "inventory", "doctor", "medis", "ownerEscalation"],
   managerMarketing: ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm"],
   marketing: ["marketing"],
   content: ["content"],
@@ -968,6 +974,7 @@ async function init() {
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
+  initSyncCoordination();
   initInstallExperience();
   registerServiceWorker();
   if (state.session.authenticated) hydrateDatasetCacheFromState();
@@ -1207,8 +1214,74 @@ function getMutationQueue() {
 }
 
 function setMutationQueue(queue) {
-  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
-  setSyncStatus({ queueLength: queue.length, pending: queue.length > 0 });
+  try {
+    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+  } catch (error) {
+    setSyncStatus({ phase: "error", pending: true, lastError: "Penyimpanan antrean perangkat penuh." });
+    throw new Error("Antrean lokal penuh. Jangan tutup aplikasi; hubungi admin untuk menyinkronkan data.");
+  }
+  const ownedLength = getOwnedMutationQueue(queue).length;
+  setSyncStatus({ queueLength: ownedLength, pending: ownedLength > 0, phase: ownedLength ? "queued" : "synced" });
+}
+
+function currentSyncOwner() {
+  const session = loadBackendAuthSession();
+  return session?.user ? {
+    userId: String(session.user.userId || ""),
+    username: String(session.user.username || ""),
+    role: normalizeRoleName(session.user.role)
+  } : null;
+}
+
+function mutationBelongsToCurrentSession(mutation, owner = currentSyncOwner()) {
+  if (!owner || !mutation) return false;
+  if (mutation.ownerUserId) return String(mutation.ownerUserId) === owner.userId;
+  if (mutation.ownerUsername) return String(mutation.ownerUsername).toLowerCase() === owner.username.toLowerCase();
+  return normalizeRoleName(mutation.ownerRole || mutation.actorRole) === owner.role;
+}
+
+function getOwnedMutationQueue(queue = getMutationQueue()) {
+  const owner = currentSyncOwner();
+  return owner ? queue.filter(mutation => mutationBelongsToCurrentSession(mutation, owner)) : [];
+}
+
+function getSyncDeadLetters() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(SYNC_DEAD_LETTER_KEY) || "[]");
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function addSyncDeadLetters(items = []) {
+  if (!items.length) return;
+  const existing = getSyncDeadLetters();
+  const byId = new Map(existing.map(item => [item.id, item]));
+  items.forEach(item => byId.set(item.id, { ...item, failedAt: new Date().toISOString() }));
+  localStorage.setItem(SYNC_DEAD_LETTER_KEY, JSON.stringify([...byId.values()].slice(-200)));
+}
+
+function initSyncCoordination() {
+  window.addEventListener("storage", event => {
+    if (event.key !== SYNC_QUEUE_KEY) return;
+    const queue = getMutationQueue();
+    const missingLocal = [...localPendingMutations.values()].filter(mutation => !queue.some(item => item.id === mutation.id));
+    if (missingLocal.length) setMutationQueue([...queue, ...missingLocal]);
+    if (getOwnedMutationQueue().length) scheduleAutoSync(700 + Math.floor(Math.random() * 900));
+  });
+  if (!("BroadcastChannel" in window)) return;
+  syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  syncChannel.addEventListener("message", event => {
+    const mutation = event.data?.mutation;
+    if (!mutation?.id) return;
+    const queue = getMutationQueue();
+    const merged = [...queue];
+    [...localPendingMutations.values(), mutation].forEach(item => {
+      if (!merged.some(existing => existing.id === item.id)) merged.push(item);
+    });
+    if (merged.length !== queue.length) setMutationQueue(merged);
+  });
 }
 
 function ensureRecordIdentity(row, dataset) {
@@ -1241,14 +1314,22 @@ function enqueueSyncMutation(dataset, type, row = {}, previousRow = null) {
     row: safeRow,
     previousRow: previousRow ? syncSafeRow(previousRow) : null,
     actorRole: currentRole,
+    ownerUserId: currentSyncOwner()?.userId || "",
+    ownerUsername: currentSyncOwner()?.username || "",
+    ownerRole: currentSyncOwner()?.role || currentRole,
     deviceId: getDeviceId(),
     clientTime: new Date().toISOString(),
     attempt: 0,
     nextAttemptAt: 0
   };
   const queue = getMutationQueue();
+  if (queue.length >= 600) throw new Error("Antrean lokal mencapai batas aman. Sinkronkan data sebelum menambah laporan baru.");
+  localPendingMutations.set(mutation.id, mutation);
   queue.push(mutation);
-  setMutationQueue(queue.slice(-600));
+  setMutationQueue(queue);
+  syncChannel?.postMessage({ mutation });
+  setSyncStatus({ phase: "queued", pending: true, lastQueuedAt: new Date().toISOString() });
+  setTimeout(() => toast("Data tersimpan di perangkat dan menunggu sinkronisasi."), 0);
   scheduleAutoSync(500 + Math.floor(Math.random() * 900));
   return mutation;
 }
@@ -1523,8 +1604,9 @@ function isReloadNavigation() {
 }
 
 function initAutoSync() {
-  window.addEventListener("online", () => scheduleAutoSync(300));
+  window.addEventListener("online", () => scheduleAutoSync(800 + Math.floor(Math.random() * 4000)));
   clearTimeout(autoSyncTimer);
+  if (getOwnedMutationQueue().length) scheduleAutoSync(800 + Math.floor(Math.random() * 2400));
 }
 
 function datasetsForPage(pageId = activePage) {
@@ -1679,10 +1761,12 @@ function scheduleAutoSync(delay = 1400) {
   if (!backend.url) return;
   if (CONFIG.BACKEND_AUTH_REQUIRED && !getBackendSessionToken()) return;
   if (!CONFIG.BACKEND_AUTH_REQUIRED && !backend.token) return;
-  const queue = getMutationQueue();
-  const nextRetryAt = Number(getSyncStatus().nextRetryAt || 0);
-  const waitForRetry = nextRetryAt > Date.now() ? nextRetryAt - Date.now() : 0;
-  if (!queue.length && delay < 1000) return;
+  const queue = getOwnedMutationQueue();
+  if (!queue.length) return;
+  const now = Date.now();
+  const readyNow = queue.some(item => Number(item.nextAttemptAt || 0) <= now);
+  const futureRetryTimes = queue.map(item => Number(item.nextAttemptAt || 0)).filter(value => value > now);
+  const waitForRetry = readyNow || !futureRetryTimes.length ? 0 : Math.min(...futureRetryTimes) - now;
   setSyncStatus({ pending: queue.length > 0, queueLength: queue.length, lastQueuedAt: new Date().toISOString() });
   clearTimeout(autoSyncTimer);
   autoSyncTimer = setTimeout(() => syncToGoogleSheets({ silent: true, source: "auto" }), Math.max(delay, waitForRetry));
@@ -1697,7 +1781,10 @@ function getSyncStatus() {
 }
 
 function setSyncStatus(nextStatus) {
-  localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify({ ...getSyncStatus(), ...nextStatus }));
+  const status = { ...getSyncStatus(), ...nextStatus };
+  localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify(status));
+  const label = document.getElementById("syncQueueStatus");
+  if (label) label.textContent = ({ queued: "Menunggu sinkronisasi", syncing: "Sedang mengirim", synced: "Tersinkron", error: "Gagal / perlu tindakan" })[status.phase] || (status.pending ? "Menunggu sinkronisasi" : "Tersinkron");
 }
 
 function migrateTreatmentNames(targetState) {
@@ -2189,6 +2276,7 @@ function canAccessPageForRole(pageId, role) {
 }
 
 function canViewDataset(dataset) {
+  if (dataset === "ownerEscalation" && ["Owner", "Manager Finance & Operational", "Manager Marketing"].includes(currentRole)) return true;
   const pageId = datasetPageId(dataset);
   return pageId ? canAccessPage(pageId) : false;
 }
@@ -2199,6 +2287,8 @@ function getAccessibleReportDatasets() {
 
 function canEdit(section) {
   const map = { manager: "Manager Finance & Operational", managerMarketingDaily: "Manager Marketing", patientCommand: "Manager Marketing", managerDecisionLog: "Manager Marketing", ownerEscalation: "Manager Marketing", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
+  if (currentRole === "Owner") return OWNER_MANAGED_DATASETS.has(section);
+  if (section === "ownerEscalation" && currentRole === "Manager Finance & Operational") return true;
   return currentRole === map[section];
 }
 
@@ -2428,6 +2518,7 @@ function renderIntegratedOwnerDashboard() {
 
 function renderManager() {
   const rows = searchRows(state.manager, ["managerName", "cashFlowNote", "patientComplaint", "operationalIssue", "actionTaken", "followUpPlan"]);
+  const escalationRows = searchRows(state.ownerEscalation, ["managerName", "topic", "reason", "supportingData", "urgency", "requestedDecision", "status", "ownerResponse", "followUp"]);
   const k = getManagerKpis();
   document.getElementById("managerPage").innerHTML = `
     ${sectionHead("Manager Finance & Operational", "Control dashboard untuk cash flow perusahaan, anggaran, laba rugi, pembayaran, SOP pelayanan, stok, jadwal tim, dan kendala pasien.")}
@@ -2441,8 +2532,11 @@ function renderManager() {
     </div>
     ${managerForm()}
     ${tableCard("Laporan Manager Finance & Operational", "manager", rows, ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"])}
+    ${ownerEscalationForm("financeOwnerEscalationForm", "Nama Manager Finance & Operational")}
+    ${tableCard("Owner Escalation", "ownerEscalation", escalationRows, ["date","managerName","topic","reason","supportingData","urgency","requestedDecision","status","ownerResponse","followUp","ownerNote"])}
   `;
   bindForm("managerForm", addManager);
+  bindForm("financeOwnerEscalationForm", addOwnerEscalation);
 }
 
 function managerForm() {
@@ -2481,7 +2575,7 @@ function managerForm() {
 async function addManager(data, fileFields = {}) {
   ["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "manager", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.manager.unshift(row);
   enqueueLocalUpsert("manager", row);
   saveState();
@@ -2577,10 +2671,10 @@ function managerDecisionForm() {
   ]);
 }
 
-function ownerEscalationForm() {
-  return formCard("ownerEscalationForm", "Owner Escalation", "ownerEscalation", [
+function ownerEscalationForm(formId = "ownerEscalationForm", managerLabel = "Nama Manager Marketing") {
+  return formCard(formId, "Owner Escalation", "ownerEscalation", [
     input("date", "Tanggal", "date"),
-    input("managerName", "Nama Manager Marketing"),
+    input("managerName", managerLabel),
     input("topic", "Topik Eskalasi"),
     textarea("reason", "Alasan Eskalasi"),
     textarea("supportingData", "Data Pendukung"),
@@ -2593,7 +2687,7 @@ function ownerEscalationForm() {
 }
 
 async function addManagerMarketingDaily(data) {
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.managerMarketingDaily.unshift(row);
   enqueueLocalUpsert("managerMarketingDaily", row);
   saveState();
@@ -2602,7 +2696,7 @@ async function addManagerMarketingDaily(data) {
 }
 
 async function addPatientCommand(data) {
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.patientCommand.unshift(row);
   enqueueLocalUpsert("patientCommand", row);
   saveState();
@@ -2611,7 +2705,7 @@ async function addPatientCommand(data) {
 }
 
 async function addManagerDecision(data) {
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.managerDecisionLog.unshift(row);
   enqueueLocalUpsert("managerDecisionLog", row);
   saveState();
@@ -2620,7 +2714,7 @@ async function addManagerDecision(data) {
 }
 
 async function addOwnerEscalation(data) {
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.ownerEscalation.unshift(row);
   enqueueLocalUpsert("ownerEscalation", row);
   saveState();
@@ -2733,7 +2827,8 @@ function crmForm() {
     textarea("voiceOfPatient", "Voice Of Patient"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
-    textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
+    textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
+    ownerNoteFormField()
   ]);
 }
 
@@ -2744,7 +2839,7 @@ async function addCrm(data, fileFields = {}) {
   data.upSellingCrossSelling = data.upSellingCrossSelling || "";
   data.voiceOfPatient = data.voiceOfPatient || data.note || "";
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "crm", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.crm.unshift(row);
   enqueueLocalUpsert("crm", row);
   saveState();
@@ -2807,7 +2902,8 @@ function marketingForm() {
     textarea("adSetSetting", "Setting Ad Set"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
     textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
-    fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true)
+    fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
+    ownerNoteFormField()
   ]);
 }
 
@@ -2819,7 +2915,7 @@ async function addMarketing(data, fileFields = {}) {
   data.frequency = data.frequency || safeDiv(data.impressions, data.reach);
   data.roas = data.roas || safeDiv(data.revenue, data.spend);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "marketing", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.marketing.unshift(row);
   enqueueLocalUpsert("marketing", row);
   saveState();
@@ -2842,7 +2938,7 @@ function renderContent() {
     </div>
     ${contentForm()}
     <div class="table-card"><h3>Pipeline Konten</h3><div class="kanban-board">${kanban()}</div></div>
-    ${tableCard("Creative Performance Calendar", "content", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","performanceNote","mediaLinks","ownerNote"])}
+    ${tableCard("Creative Performance Calendar", "content", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","performanceNote","bottleneck","mediaLinks","ownerNote"])}
   `;
   bindForm("contentForm", addContent);
 }
@@ -2870,15 +2966,17 @@ function contentForm() {
     input("saves", "Saves", "number"),
     input("leads", "Leads Generated", "number"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
+    textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
-    select("status", "Pipeline", ["Idea", "Script", "Design", "Editing", "Revision", "Approved", "Posted"])
+    select("status", "Pipeline", ["Idea", "Script", "Design", "Editing", "Revision", "Approved", "Posted"]),
+    ownerNoteFormField()
   ]);
 }
 
 async function addContent(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","views","reach","likes","comments","shares","saves","leads"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "content", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.content.unshift(row);
   enqueueLocalUpsert("content", row);
   saveState();
@@ -2923,7 +3021,8 @@ function doctorForm() {
     input("rebooking", "Rekomendasi Rebooking"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
     textarea("bottleneck", "Bottleneck"),
-    fileInput("mediaFiles", "Upload Foto/Video Before After", "image/*,video/*", true)
+    fileInput("mediaFiles", "Upload Foto/Video Before After", "image/*,video/*", true),
+    ownerNoteFormField()
   ]);
 }
 
@@ -2931,7 +3030,7 @@ async function addDoctor(data, fileFields = {}) {
   data.dailyOmzet = num(data.dailyOmzet);
   data.dailyExpense = num(data.dailyExpense);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "doctor", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.doctor.unshift(row);
   enqueueLocalUpsert("doctor", row);
   saveState();
@@ -2979,7 +3078,8 @@ function medisForm() {
     input("complaint", "Keluhan Pasien"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto Before-After & Video Treatment", "image/*,video/*", true),
-    textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
+    textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
+    ownerNoteFormField()
   ]);
 }
 
@@ -2994,7 +3094,7 @@ async function addMedis(data, fileFields = {}) {
     const uploadedFiles = await uploadTreatmentMedia(mediaFiles, data, "medis");
     data.mediaLinks = uploadedFiles.map(file => file.url).filter(Boolean).join("\n");
   }
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.medis.unshift(row);
   enqueueLocalUpsert("medis", row);
   saveState();
@@ -3091,14 +3191,15 @@ function inventoryForm() {
     input("expired", "Expired Date", "date"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
     fileInput("mediaFiles", "Upload Foto/Video", "image/*,video/*", true),
-    textarea("bottleneck", "Catatan Evaluasi/Bottleneck")
+    textarea("bottleneck", "Catatan Evaluasi/Bottleneck"),
+    ownerNoteFormField()
   ]);
 }
 
 async function addInventory(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","initial","inQty","outQty","minimum"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "inventory", data);
-  const row = { ...data, ownerNote: "" };
+  const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.inventory.unshift(row);
   enqueueLocalUpsert("inventory", row);
   saveState();
@@ -3234,7 +3335,7 @@ function renderSettings() {
         </div>
         <div>
           <strong>Sinkronisasi</strong>
-          <p>${syncStatus.pending ? `${formatNumber(syncStatus.queueLength || getMutationQueue().length)} perubahan menunggu sync` : "Tidak ada antrian sinkronisasi"}</p>
+          <p>${syncStatus.pending ? `${formatNumber(syncStatus.queueLength || getOwnedMutationQueue().length)} perubahan menunggu sync` : "Tidak ada antrian sinkronisasi"}</p>
         </div>
         <div>
           <strong>Update Terakhir</strong>
@@ -3348,7 +3449,7 @@ function formCard(id, title, section, fields) {
   return `<form class="form-card" id="${id}">
     <div class="section-head"><div><h2>${title}</h2><p>${note}</p></div></div>
     <fieldset ${disabled}>
-      <div class="form-grid">${fields.join("")}</div>
+      <div class="form-grid">${fields.filter(Boolean).join("")}</div>
       <div class="form-actions"><button class="primary-button">Tambah Data</button></div>
     </fieldset>
   </form>`;
@@ -3393,6 +3494,10 @@ function shouldKeepDefaultColumn(dataset, col, rows) {
   if (["ownerNote", "mediaLinks"].includes(col)) return true;
   if (dataset === "inventory" && ["finalStock", "stockStatus"].includes(col)) return true;
   return rows.some(row => row[col] !== undefined && row[col] !== "");
+}
+
+function ownerNoteFormField() {
+  return currentRole === "Owner" ? textarea("ownerNote", "Catatan Owner") : "";
 }
 
 function collectRowKeys(rows) {
@@ -3633,7 +3738,7 @@ function canDelete(dataset) {
 }
 
 function canManageDataset(dataset) {
-  return (currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset)) || (currentRole === "Manager Finance & Operational" && dataset === "manager") || (currentRole === "Manager Marketing" && MANAGER_MARKETING_DATASETS.includes(dataset));
+  return (currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset)) || (currentRole === "Manager Finance & Operational" && ["manager", "ownerEscalation"].includes(dataset)) || (currentRole === "Manager Marketing" && MANAGER_MARKETING_DATASETS.includes(dataset));
 }
 
 function renderCharts() {
@@ -4312,7 +4417,7 @@ async function syncToGoogleSheets(options = {}) {
     return false;
   }
 
-  const queue = getMutationQueue();
+  const queue = getOwnedMutationQueue();
   if (queue.length) return flushMutationQueue(options);
   if (options.source === "auto") return true;
   if (CONFIG.BACKEND_AUTH_REQUIRED) {
@@ -4358,16 +4463,28 @@ async function syncToGoogleSheets(options = {}) {
 }
 
 async function flushMutationQueue(options = {}) {
+  if (syncInProgress) return false;
+  if (navigator.locks?.request) {
+    return navigator.locks.request("afk-dashboard-outbox", { ifAvailable: true }, lock => lock ? flushMutationQueueOwned(options) : false);
+  }
+  return flushMutationQueueOwned(options);
+}
+
+async function flushMutationQueueOwned(options = {}) {
   const backend = getBackendConfig();
   if (syncInProgress) return false;
   if (!navigator.onLine) {
-    setSyncStatus({ pending: true, lastError: "Perangkat offline. Data tetap aman di antrean lokal.", queueLength: getMutationQueue().length });
+    setSyncStatus({ phase: "queued", pending: true, lastError: "Perangkat offline. Data tetap aman di antrean lokal.", queueLength: getOwnedMutationQueue().length });
     return false;
   }
-  if (!acquireSyncLock()) return false;
+  if (!acquireSyncLock()) {
+    setSyncStatus({ phase: "queued", pending: true, lastError: "Tab lain sedang menyinkronkan data." });
+    scheduleAutoSync(900 + Math.floor(Math.random() * 1800));
+    return false;
+  }
   syncInProgress = true;
 
-  const queue = getMutationQueue();
+  const queue = getOwnedMutationQueue();
   const now = Date.now();
   const ready = queue.filter(item => Number(item.nextAttemptAt || 0) <= now).slice(0, SYNC_BATCH_SIZE);
   if (!ready.length) {
@@ -4380,9 +4497,10 @@ async function flushMutationQueue(options = {}) {
   try {
     const sessionToken = getBackendSessionToken();
     if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) {
-      setSyncStatus({ pending: true, lastError: "Login backend diperlukan sebelum sync.", queueLength: getMutationQueue().length });
+      setSyncStatus({ phase: "queued", pending: true, lastError: "Login backend diperlukan sebelum sync.", queueLength: getOwnedMutationQueue().length });
       return false;
     }
+    setSyncStatus({ phase: "syncing", pending: true, queueLength: queue.length, lastError: "" });
     const response = await fetchWithTimeout(backend.url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -4399,22 +4517,48 @@ async function flushMutationQueue(options = {}) {
     }, 45000);
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Sync mutation gagal.");
-    const acceptedIds = new Set(result.acceptedIds || ready.map(item => item.id));
+    const resultById = new Map((result.results || []).map(item => [item.operationId, item]));
+    const acceptedIds = new Set(result.acceptedIds || []);
+    const permanentIds = new Set(result.permanentIds || []);
+    const retryableIds = new Set(result.retryableIds || []);
+    if (!result.results && !result.acceptedIds) ready.forEach(item => acceptedIds.add(item.id));
+    (result.results || []).forEach(item => {
+      if (["APPLIED", "ALREADY_APPLIED"].includes(item.status)) acceptedIds.add(item.operationId);
+      else if (["PERMANENT_ERROR", "FORBIDDEN"].includes(item.status)) permanentIds.add(item.operationId);
+      else if (item.status === "RETRYABLE_ERROR") retryableIds.add(item.operationId);
+    });
+    ready.forEach(item => {
+      if (!acceptedIds.has(item.id) && !permanentIds.has(item.id) && !retryableIds.has(item.id)) retryableIds.add(item.id);
+    });
     [...new Set(ready.filter(item => acceptedIds.has(item.id)).map(item => item.dataset))]
       .forEach(invalidateDatasetCache);
-    const remaining = getMutationQueue().filter(item => !acceptedIds.has(item.id));
+    const retryAt = Date.now() + retryDelayFor(ready.filter(item => retryableIds.has(item.id)));
+    const deadLetters = ready.filter(item => permanentIds.has(item.id)).map(item => ({
+      ...item,
+      failureStatus: resultById.get(item.id)?.status || "PERMANENT_ERROR",
+      lastError: resultById.get(item.id)?.error || "Mutation ditolak backend."
+    }));
+    addSyncDeadLetters(deadLetters);
+    const removeIds = new Set([...acceptedIds, ...permanentIds]);
+    removeIds.forEach(id => localPendingMutations.delete(id));
+    const remaining = getMutationQueue().filter(item => !removeIds.has(item.id)).map(item => retryableIds.has(item.id)
+      ? { ...item, attempt: Number(item.attempt || 0) + 1, nextAttemptAt: retryAt, lastError: resultById.get(item.id)?.error || "Gangguan sementara backend." }
+      : item
+    );
     setMutationQueue(remaining);
+    const ownedRemaining = getOwnedMutationQueue(remaining);
     setSyncStatus({
-      pending: remaining.length > 0,
-      queueLength: remaining.length,
+      phase: deadLetters.length ? "error" : (ownedRemaining.length ? "queued" : "synced"),
+      pending: ownedRemaining.length > 0,
+      queueLength: ownedRemaining.length,
       lastSuccessAt: new Date().toISOString(),
-      lastError: "",
-      retryCount: 0,
-      nextRetryAt: 0,
+      lastError: deadLetters.length ? `${deadLetters.length} perubahan perlu tindakan.` : "",
+      retryCount: retryableIds.size,
+      nextRetryAt: retryableIds.size ? retryAt : 0,
       lastBatchSize: ready.length
     });
-    if (remaining.length) scheduleAutoSync(800 + Math.floor(Math.random() * 1200));
-    if (!options.silent) toast("Data berhasil dikirim ke backend.");
+    if (ownedRemaining.length) scheduleAutoSync(retryableIds.size ? retryAt - Date.now() : 800 + Math.floor(Math.random() * 1200));
+    if (!options.silent) toast(deadLetters.length ? "Sebagian data perlu diperbaiki. Data valid sudah tersinkron." : "Data berhasil tersinkron ke server.");
     return true;
   } catch (error) {
     const failedIds = new Set(ready.map(item => item.id));
@@ -4425,6 +4569,7 @@ async function flushMutationQueue(options = {}) {
     );
     setMutationQueue(updatedQueue);
     setSyncStatus({
+      phase: "queued",
       pending: true,
       queueLength: updatedQueue.length,
       lastError: error.message,
@@ -4433,7 +4578,7 @@ async function flushMutationQueue(options = {}) {
       nextRetryAt: retryAt
     });
     scheduleAutoSync(retryAt - Date.now());
-    if (!options.silent) toast(`Sync Google Sheets gagal, data tetap aman di antrean: ${error.message}`);
+    if (!options.silent) toast(`Belum tersinkron. Data tetap aman di perangkat: ${error.message}`);
     return false;
   } finally {
     syncInProgress = false;
@@ -4452,9 +4597,10 @@ function acquireSyncLock() {
   const now = Date.now();
   try {
     const lock = JSON.parse(localStorage.getItem(SYNC_LOCK_KEY) || "null");
-    if (lock && lock.expiresAt > now && lock.deviceId !== getDeviceId()) return false;
+    if (lock && lock.expiresAt > now && lock.ownerId !== TAB_SYNC_INSTANCE_ID) return false;
   } catch {}
   localStorage.setItem(SYNC_LOCK_KEY, JSON.stringify({
+    ownerId: TAB_SYNC_INSTANCE_ID,
     deviceId: getDeviceId(),
     acquiredAt: now,
     expiresAt: now + SYNC_LOCK_TTL_MS
@@ -4465,7 +4611,7 @@ function acquireSyncLock() {
 function releaseSyncLock() {
   try {
     const lock = JSON.parse(localStorage.getItem(SYNC_LOCK_KEY) || "null");
-    if (!lock || lock.deviceId === getDeviceId()) localStorage.removeItem(SYNC_LOCK_KEY);
+    if (!lock || lock.ownerId === TAB_SYNC_INSTANCE_ID) localStorage.removeItem(SYNC_LOCK_KEY);
   } catch {
     localStorage.removeItem(SYNC_LOCK_KEY);
   }
@@ -4486,7 +4632,7 @@ async function fetchFromGoogleSheets(options = {}) {
   }
   const sessionToken = getBackendSessionToken();
   if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) return null;
-  const pendingQueue = getMutationQueue();
+  const pendingQueue = getOwnedMutationQueue();
   if (pendingQueue.length && options.source === "startup") {
     setSyncStatus({
       pending: true,
