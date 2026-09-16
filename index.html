@@ -309,6 +309,14 @@ th { color: var(--muted); font-size: 12px; background: #fff8fc; position: sticky
 }
 .password-entry { position: relative; }
 .password-entry input { width: 100%; padding-right: 48px; }
+.login-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+.login-status.is-loading { color: var(--pink); }
 .password-toggle {
   position: absolute;
   right: 8px;
@@ -769,8 +777,9 @@ tbody tr:hover {
       </label>
       <div class="modal-actions">
         <button class="ghost-button" value="cancel" type="button" id="cancelLogin">Batal</button>
-        <button class="primary-button" value="default">Masuk</button>
+        <button class="primary-button" value="default" id="loginSubmitButton">Masuk</button>
       </div>
+      <div class="login-status" id="loginStatus" aria-live="polite"></div>
       <small class="login-credit">Developed by : Markaz Dakwah Digital</small>
     </form>
   </dialog>
@@ -848,6 +857,7 @@ let autoSyncTimer = null;
 let autoSyncPaused = false;
 let syncInProgress = false;
 let searchRenderTimer = null;
+let loginInProgress = false;
 const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const DATASET_KEYS = ["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"];
@@ -899,6 +909,8 @@ const els = {
   loginRoleSelect: document.getElementById("loginRoleSelect"),
   passwordInput: document.getElementById("passwordInput"),
   togglePassword: document.getElementById("togglePassword"),
+  loginSubmitButton: document.getElementById("loginSubmitButton"),
+  loginStatus: document.getElementById("loginStatus"),
   cancelLogin: document.getElementById("cancelLogin"),
   menuToggle: document.getElementById("menuToggle"),
   sidebar: document.querySelector(".sidebar"),
@@ -1802,6 +1814,7 @@ function openLogin(role) {
   els.passwordInput.type = "password";
   els.togglePassword.setAttribute("aria-label", "Tampilkan password");
   els.togglePassword.title = "Tampilkan password";
+  setLoginLoading(false);
   els.cancelLogin.style.display = loginRequired ? "none" : "";
   els.loginModal.showModal();
   setTimeout(() => els.loginRoleSelect.focus(), 50);
@@ -1810,6 +1823,7 @@ function openLogin(role) {
 async function loginWithBackendAuth(account, password) {
   const backend = getBackendConfig();
   if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url) return null;
+  const startedAt = performance.now();
   const response = await fetchWithTimeout(backend.url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -1819,7 +1833,13 @@ async function loginWithBackendAuth(account, password) {
       password
     })
   }, 30000);
+  const responseAt = performance.now();
   const result = await response.json();
+  result.frontendTiming = {
+    loginResponseMs: Math.round(responseAt - startedAt),
+    loginParseMs: Math.round(performance.now() - responseAt),
+    backendTiming: result.timing || null
+  };
   if (!result.ok || !result.success || !result.sessionToken || !result.user) {
     throw new Error(result.error || "Login backend gagal.");
   }
@@ -1862,6 +1882,7 @@ async function handleLogout() {
 
 async function handleLogin(event) {
   event.preventDefault();
+  if (loginInProgress) return;
   const role = normalizeRoleName(els.loginRoleSelect.value);
   const account = getAccount(role);
   const password = els.passwordInput.value;
@@ -1870,10 +1891,14 @@ async function handleLogin(event) {
     return;
   }
 
+  setLoginLoading(true, "Sedang masuk...");
+  const loginStartedAt = performance.now();
   let authenticatedRole = role;
   let backendAuthenticated = false;
+  let loginTiming = null;
   try {
     const backendLogin = await loginWithBackendAuth(account, password);
+    loginTiming = backendLogin?.frontendTiming || null;
     if (backendLogin) {
       authenticatedRole = normalizeRoleName(backendLogin.user.role);
       backendAuthenticated = true;
@@ -1883,6 +1908,7 @@ async function handleLogin(event) {
   } catch (error) {
     if (CONFIG.BACKEND_AUTH_REQUIRED || !CONFIG.ALLOW_LEGACY_LOGIN_FALLBACK) {
       clearBackendAuthSession();
+      setLoginLoading(false);
       toast(error.message || "Login backend gagal.");
       return;
     }
@@ -1890,6 +1916,7 @@ async function handleLogin(event) {
 
   if (!backendAuthenticated) {
     if (password !== account.password) {
+      setLoginLoading(false);
       toast("Password role tidak sesuai.");
       return;
     }
@@ -1905,9 +1932,48 @@ async function handleLogin(event) {
   els.roleSelect.value = authenticatedRole;
   saveState();
   buildNavigation();
-  renderAll();
-  els.loginModal.close();
-  toast(`Berhasil masuk sebagai ${authenticatedRole}.`);
+  const shellStartedAt = performance.now();
+  try {
+    renderAll();
+    els.loginModal.close();
+    reportLoginTiming({
+      role: authenticatedRole,
+      loginResponseMs: loginTiming?.loginResponseMs,
+      loginParseMs: loginTiming?.loginParseMs,
+      backendTiming: loginTiming?.backendTiming,
+      dashboardShellMs: Math.round(performance.now() - shellStartedAt),
+      totalMs: Math.round(performance.now() - loginStartedAt)
+    });
+    toast(`Berhasil masuk sebagai ${authenticatedRole}.`);
+  } finally {
+    setLoginLoading(false);
+  }
+}
+
+function setLoginLoading(isLoading, message = "") {
+  loginInProgress = Boolean(isLoading);
+  if (els.loginSubmitButton) {
+    els.loginSubmitButton.disabled = Boolean(isLoading);
+    els.loginSubmitButton.textContent = isLoading ? "Sedang masuk..." : "Masuk";
+  }
+  if (els.loginRoleSelect) els.loginRoleSelect.disabled = Boolean(isLoading);
+  if (els.passwordInput) els.passwordInput.disabled = Boolean(isLoading);
+  if (els.togglePassword) els.togglePassword.disabled = Boolean(isLoading);
+  if (els.loginStatus) {
+    els.loginStatus.textContent = message || "";
+    els.loginStatus.classList.toggle("is-loading", Boolean(isLoading));
+  }
+}
+
+function reportLoginTiming(timing) {
+  console.info("AFK login timing", {
+    role: timing.role,
+    clickToLoginResponseMs: timing.loginResponseMs ?? null,
+    loginResponseToDashboardShellMs: timing.dashboardShellMs ?? null,
+    loginParseMs: timing.loginParseMs ?? null,
+    totalMs: timing.totalMs ?? null,
+    backendTiming: timing.backendTiming || null
+  });
 }
 
 function visibleNavItems() {
