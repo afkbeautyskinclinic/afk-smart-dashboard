@@ -1,7 +1,7 @@
 const CACHE_PREFIX = "afk-dashboard-";
-const CACHE_NAME = "afk-dashboard-v1.5.33";
+const CACHE_NAME = "afk-dashboard-v1.5.35-security-cutover";
 const APP_SHELL = [
-  "./manifest.webmanifest?v=1.5.33",
+  "./manifest.webmanifest?v=1.5.35-security-cutover",
   "./assets/icon-192.png",
   "./assets/icon-512.png"
 ];

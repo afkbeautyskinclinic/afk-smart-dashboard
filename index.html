@@ -95,7 +95,7 @@ fieldset:disabled { opacity: .72; }
 .main { min-width: 0; padding: 20px 24px 90px; }
 .topbar {
   display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) minmax(220px, 420px) auto auto auto;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(220px, 420px) auto auto auto auto;
   gap: 14px;
   align-items: center;
   margin-bottom: 18px;
@@ -112,6 +112,18 @@ fieldset:disabled { opacity: .72; }
 }
 .install-button { display: none; color: var(--pink); font-weight: 900; }
 .install-button.ready { display: inline-flex; align-items: center; justify-content: center; }
+.logout-button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 14px;
+  background: var(--white);
+  color: var(--muted);
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(40,17,33,.06);
+}
+.logout-button:hover { color: var(--pink); border-color: rgba(216,23,123,.35); }
 .primary-button { background: linear-gradient(135deg, var(--pink), #e85f9f); color: #fff; border-color: transparent; font-weight: 760; }
 .danger-button { color: #fff; background: #3a3337; border-color: transparent; }
 .search-box, .role-box {
@@ -697,6 +709,7 @@ tbody tr:hover {
             <option>Inventory</option>
           </select>
         </div>
+        <button class="logout-button" id="logoutButton" type="button">Logout</button>
       </header>
 
       <section class="hero-band">
@@ -765,7 +778,10 @@ tbody tr:hover {
   <script>
 const CONFIG = {
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxXHnrGL7pFezEXAfa42bqKwVPt5CLKtZXJFPNXg7hrNpdoi27J0lHFCdUGCXK1WqG8/exec",
-  GOOGLE_APPS_SCRIPT_TOKEN: "839be6bf-ea86-43bc-93b4-97ce4edd4c0a-e66327aa-c9ac-43b6-91b4-349335bd5b85"
+  GOOGLE_APPS_SCRIPT_TOKEN: "",
+  BACKEND_AUTH_ENABLED: true,
+  BACKEND_AUTH_REQUIRED: true,
+  ALLOW_LEGACY_LOGIN_FALLBACK: false
 };
 
 const STORAGE_KEY = "afkBeautyDashboard.v1";
@@ -774,6 +790,7 @@ const SYNC_QUEUE_KEY = "afkBeautyDashboard.syncQueue.v2";
 const DEVICE_ID_KEY = "afkBeautyDashboard.deviceId.v1";
 const SYNC_LOCK_KEY = "afkBeautyDashboard.syncLock.v1";
 const AUTH_SESSION_KEY = "afkBeautyDashboard.authSession.v1";
+const BACKEND_AUTH_SESSION_KEY = "afkBeautyDashboard.backendAuthSession.v1";
 const TAB_SESSION_KEY = "afkBeautyDashboard.tabSession.v1";
 const REFRESH_RESTORE_KEY = "afkBeautyDashboard.refreshRestore.v1";
 const WINDOW_SESSION_PREFIX = "afkBeautyDashboard.windowSession:";
@@ -794,15 +811,15 @@ const DEFAULT_TREATMENT_LIST = "Vaser Liposuction, Mini Surgery";
 const DEFAULT_SOURCE_LIST = "Meta Ads (FB), Instagram Ads, Tiktok Ads, Google Ads, Websites, Data Base, Walk In, Referral";
 const DEFAULT_PRIMARY_COLOR = "#e81887";
 const ROLE_DEFINITIONS = [
-  { role: "Owner", username: "owner", password: "owner123", pages: ["owner","manager","managerMarketing","marketing","content","crm","doctor","medis","inventory","reports","settings"] },
-  { role: "Manager Finance & Operational", username: "manager", password: "manager123", pages: ["manager","marketing","content","crm","doctor","medis","inventory","reports"] },
-  { role: "Manager Marketing", username: "managerMarketing", password: "managerMarketing123", pages: ["managerMarketing","marketing","content","crm","doctor","medis","inventory","reports"] },
-  { role: "Digital Marketing", username: "marketing", password: "marketing123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
-  { role: "Creative Performance", username: "creative", password: "design123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
-  { role: "CRM", username: "crm", password: "crm123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
-  { role: "Dokter", username: "dokter", password: "dokter123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
-  { role: "Medis", username: "medis", password: "medis123", pages: ["marketing","content","crm","doctor","medis","inventory"] },
-  { role: "Inventory", username: "inventory", password: "inventory123", pages: ["marketing","content","crm","doctor","medis","inventory","settings"] }
+  { role: "Owner", username: "owner", pages: ["owner","manager","managerMarketing","marketing","content","crm","doctor","medis","inventory","reports","settings"] },
+  { role: "Manager Finance & Operational", username: "manager", pages: ["manager","marketing","content","crm","doctor","medis","inventory","reports"] },
+  { role: "Manager Marketing", username: "managerMarketing", pages: ["managerMarketing","marketing","content","crm","doctor","medis","inventory","reports"] },
+  { role: "Digital Marketing", username: "marketing", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Creative Performance", username: "creative", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "CRM", username: "crm", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Dokter", username: "dokter", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Medis", username: "medis", pages: ["marketing","content","crm","doctor","medis","inventory"] },
+  { role: "Inventory", username: "inventory", pages: ["marketing","content","crm","doctor","medis","inventory","settings"] }
 ];
 const SETTINGS_ROLES = new Set(["Owner", "Inventory"]);
 
@@ -885,7 +902,8 @@ const els = {
   cancelLogin: document.getElementById("cancelLogin"),
   menuToggle: document.getElementById("menuToggle"),
   sidebar: document.querySelector(".sidebar"),
-  installButton: document.getElementById("installApp")
+  installButton: document.getElementById("installApp"),
+  logoutButton: document.getElementById("logoutButton")
 };
 
 document.addEventListener("DOMContentLoaded", init);
@@ -893,6 +911,7 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   clearOldAppCaches();
   restoreSessionFromHash();
+  await validateBackendSessionOnStart();
   refreshLoginRoleOptions();
   els.roleSelect.value = currentRole;
   buildNavigation();
@@ -987,7 +1006,7 @@ function defaultUserAccounts() {
   return ROLE_DEFINITIONS.map(account => ({
     role: account.role,
     username: account.username,
-    password: account.password,
+    password: "",
     enabled: true,
     pages: [...account.pages]
   }));
@@ -1005,7 +1024,7 @@ function normalizeUserAccounts(accounts) {
     return {
       role: defaultAccount.role,
       username: String(saved.username || defaultAccount.username),
-      password: String(saved.password || defaultAccount.password),
+      password: CONFIG.BACKEND_AUTH_REQUIRED ? "" : String(saved.password || defaultAccount.password || ""),
       enabled: defaultAccount.role === "Owner" ? true : saved.enabled !== false,
       pages: pages.length ? pages : [...defaultAccount.pages]
     };
@@ -1208,6 +1227,10 @@ function loadAuthSession() {
 }
 
 function saveAuthSession(role, page = activePage) {
+  if (CONFIG.BACKEND_AUTH_REQUIRED) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    return;
+  }
   const expiresAt = Date.now() + AUTH_SESSION_DAYS * 24 * 60 * 60 * 1000;
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
     role: normalizeRoleName(role),
@@ -1217,7 +1240,49 @@ function saveAuthSession(role, page = activePage) {
   }));
 }
 
+function loadBackendAuthSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(BACKEND_AUTH_SESSION_KEY) || "null");
+    if (!session || !session.sessionToken || !session.user?.role || !session.expiresAt) return null;
+    if (Date.now() > new Date(session.expiresAt).getTime()) {
+      localStorage.removeItem(BACKEND_AUTH_SESSION_KEY);
+      return null;
+    }
+    return {
+      sessionToken: session.sessionToken,
+      user: {
+        userId: session.user.userId || "",
+        username: session.user.username || "",
+        role: normalizeRoleName(session.user.role)
+      },
+      activePage: isKnownPage(session.activePage) ? session.activePage : rolePage(session.user.role),
+      expiresAt: session.expiresAt
+    };
+  } catch {
+    localStorage.removeItem(BACKEND_AUTH_SESSION_KEY);
+    return null;
+  }
+}
+
+function saveBackendAuthSession(user, sessionToken, expiresAt, page = activePage) {
+  localStorage.setItem(BACKEND_AUTH_SESSION_KEY, JSON.stringify({
+    sessionToken,
+    user: {
+      userId: user.userId || "",
+      username: user.username || "",
+      role: normalizeRoleName(user.role)
+    },
+    activePage: isKnownPage(page) ? page : rolePage(user.role),
+    expiresAt
+  }));
+}
+
+function clearBackendAuthSession() {
+  localStorage.removeItem(BACKEND_AUTH_SESSION_KEY);
+}
+
 function loadCurrentTabSession() {
+  if (CONFIG.BACKEND_AUTH_REQUIRED) return null;
   try {
     const session = JSON.parse(sessionStorage.getItem(TAB_SESSION_KEY) || "null");
     if (!session || !session.authenticated || !session.role) return null;
@@ -1238,6 +1303,7 @@ function loadCurrentTabSession() {
 }
 
 function loadWindowSession() {
+  if (CONFIG.BACKEND_AUTH_REQUIRED) return null;
   try {
     if (!String(window.name || "").startsWith(WINDOW_SESSION_PREFIX)) return null;
     const session = JSON.parse(String(window.name).slice(WINDOW_SESSION_PREFIX.length));
@@ -1277,6 +1343,7 @@ function saveHashSession(role = currentRole, page = activePage) {
 }
 
 function restoreSessionFromHash() {
+  if (CONFIG.BACKEND_AUTH_REQUIRED) return false;
   const session = loadHashSession();
   if (!session) return false;
   currentRole = session.role;
@@ -1323,6 +1390,10 @@ function roleFromToken(token) {
 }
 
 function loadRefreshRestoreSession() {
+  if (CONFIG.BACKEND_AUTH_REQUIRED) {
+    localStorage.removeItem(REFRESH_RESTORE_KEY);
+    return null;
+  }
   try {
     const session = JSON.parse(localStorage.getItem(REFRESH_RESTORE_KEY) || "null");
     localStorage.removeItem(REFRESH_RESTORE_KEY);
@@ -1343,6 +1414,7 @@ function loadRefreshRestoreSession() {
 
 function saveRefreshRestoreMarker() {
   if (!state.session.authenticated) return;
+  if (CONFIG.BACKEND_AUTH_REQUIRED) return;
   localStorage.setItem(REFRESH_RESTORE_KEY, JSON.stringify({
     role: normalizeRoleName(currentRole),
     authenticated: true,
@@ -1352,8 +1424,16 @@ function saveRefreshRestoreMarker() {
 }
 
 function saveCurrentTabSession(role = currentRole, page = activePage) {
-  saveAuthSession(role, page);
-  saveHashSession(role, page);
+  if (CONFIG.BACKEND_AUTH_REQUIRED) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(TAB_SESSION_KEY);
+    if (String(window.name || "").startsWith(WINDOW_SESSION_PREFIX)) window.name = "";
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    return;
+  } else {
+    saveAuthSession(role, page);
+    saveHashSession(role, page);
+  }
   const session = {
     role: normalizeRoleName(role),
     authenticated: true,
@@ -1366,7 +1446,9 @@ function saveCurrentTabSession(role = currentRole, page = activePage) {
 
 function applyCurrentTabSession(targetState) {
   const previousRole = normalizeRoleName(targetState.session?.role || "Owner");
-  const session = loadHashSession() || loadWindowSession() || loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null);
+  const backendSession = loadBackendAuthSession();
+  const legacySession = CONFIG.BACKEND_AUTH_REQUIRED ? null : (loadHashSession() || loadWindowSession() || loadRefreshRestoreSession() || (isReloadNavigation() ? (loadCurrentTabSession() || loadAuthSession()) : null));
+  const session = backendSession ? { role: backendSession.user.role, authenticated: true, activePage: backendSession.activePage } : legacySession;
   targetState.session = session
     ? { role: session.role, authenticated: true, activePage: session.activePage }
     : { role: previousRole, authenticated: false, activePage: "" };
@@ -1396,13 +1478,46 @@ function initAutoSync() {
 async function refreshFromBackendOnStart() {
   const backend = getBackendConfig();
   if (!backend.url) return null;
+  if (CONFIG.BACKEND_AUTH_REQUIRED && !getBackendSessionToken()) return null;
   return fetchFromGoogleSheets({ silent: true, source: "startup" });
+}
+
+async function validateBackendSessionOnStart() {
+  const backend = getBackendConfig();
+  const session = loadBackendAuthSession();
+  if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url || !session?.sessionToken) return false;
+  try {
+    const response = await fetchWithTimeout(backend.url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "validateSession",
+        sessionToken: session.sessionToken
+      })
+    }, 30000);
+    const result = await response.json();
+    if (!result.ok || !result.success || !result.user) throw new Error(result.error || "Session tidak valid.");
+    const role = normalizeRoleName(result.user.role);
+    currentRole = role;
+    activePage = canAccessPageForRole(session.activePage, role) ? session.activePage : rolePage(role);
+    state.session = { role, authenticated: true, backendAuthenticated: true, activePage };
+    saveBackendAuthSession(result.user, session.sessionToken, session.expiresAt, activePage);
+    return true;
+  } catch {
+    clearBackendAuthSession();
+    if (CONFIG.BACKEND_AUTH_REQUIRED) {
+      state.session = { role: currentRole, authenticated: false, activePage: "" };
+    }
+    return false;
+  }
 }
 
 function scheduleAutoSync(delay = 1400) {
   if (autoSyncPaused) return;
   const backend = getBackendConfig();
-  if (!backend.url || !backend.token) return;
+  if (!backend.url) return;
+  if (CONFIG.BACKEND_AUTH_REQUIRED && !getBackendSessionToken()) return;
+  if (!CONFIG.BACKEND_AUTH_REQUIRED && !backend.token) return;
   const queue = getMutationQueue();
   const nextRetryAt = Number(getSyncStatus().nextRetryAt || 0);
   const waitForRetry = nextRetryAt > Date.now() ? nextRetryAt - Date.now() : 0;
@@ -1610,6 +1725,7 @@ function bindGlobalEvents() {
   els.globalSearch.addEventListener("search", scheduleSearchRender);
   els.globalSearch.addEventListener("change", scheduleSearchRender);
   els.menuToggle.addEventListener("click", () => els.sidebar.classList.toggle("open"));
+  els.logoutButton.addEventListener("click", handleLogout);
   document.getElementById("notifyButton").addEventListener("click", () => toast("5 alert aktif: follow up, no show, stok, konten, laporan."));
   window.addEventListener("pagehide", saveRefreshRestoreMarker);
   window.addEventListener("beforeunload", saveRefreshRestoreMarker);
@@ -1691,26 +1807,107 @@ function openLogin(role) {
   setTimeout(() => els.loginRoleSelect.focus(), 50);
 }
 
-function handleLogin(event) {
+async function loginWithBackendAuth(account, password) {
+  const backend = getBackendConfig();
+  if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url) return null;
+  const response = await fetchWithTimeout(backend.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "login",
+      username: account.username,
+      password
+    })
+  }, 30000);
+  const result = await response.json();
+  if (!result.ok || !result.success || !result.sessionToken || !result.user) {
+    throw new Error(result.error || "Login backend gagal.");
+  }
+  return result;
+}
+
+async function logoutFromBackendAuth() {
+  const backend = getBackendConfig();
+  const sessionToken = getBackendSessionToken();
+  if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url || !sessionToken) return;
+  const response = await fetchWithTimeout(backend.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "logout",
+      sessionToken
+    })
+  }, 30000);
+  const result = await response.json();
+  if (!result.ok || !result.success) throw new Error(result.error || "Logout backend gagal.");
+}
+
+async function handleLogout() {
+  try {
+    await logoutFromBackendAuth();
+  } catch (error) {
+    if (!CONFIG.BACKEND_AUTH_REQUIRED) toast(error.message || "Logout backend gagal, session lokal dibersihkan.");
+  } finally {
+    clearBackendAuthSession();
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(TAB_SESSION_KEY);
+    sessionStorage.removeItem(REFRESH_RESTORE_KEY);
+    if (String(window.name || "").startsWith(WINDOW_SESSION_PREFIX)) window.name = "";
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    state.session = { role: currentRole, authenticated: false, activePage: "" };
+    openLogin(currentRole);
+    toast("Berhasil logout.");
+  }
+}
+
+async function handleLogin(event) {
   event.preventDefault();
   const role = normalizeRoleName(els.loginRoleSelect.value);
   const account = getAccount(role);
-  if (!account || account.enabled === false || els.passwordInput.value !== account.password) {
-    toast("Password role tidak sesuai.");
+  const password = els.passwordInput.value;
+  if (!account || account.enabled === false) {
+    toast("Akun role tidak aktif.");
     return;
   }
-  currentRole = role;
-  state.session = { role, authenticated: true };
-  saveAuthSession(role);
-  activePage = role === "Owner" ? "owner" : rolePage(role);
+
+  let authenticatedRole = role;
+  let backendAuthenticated = false;
+  try {
+    const backendLogin = await loginWithBackendAuth(account, password);
+    if (backendLogin) {
+      authenticatedRole = normalizeRoleName(backendLogin.user.role);
+      backendAuthenticated = true;
+      activePage = authenticatedRole === "Owner" ? "owner" : rolePage(authenticatedRole);
+      saveBackendAuthSession(backendLogin.user, backendLogin.sessionToken, backendLogin.expiresAt, activePage);
+    }
+  } catch (error) {
+    if (CONFIG.BACKEND_AUTH_REQUIRED || !CONFIG.ALLOW_LEGACY_LOGIN_FALLBACK) {
+      clearBackendAuthSession();
+      toast(error.message || "Login backend gagal.");
+      return;
+    }
+  }
+
+  if (!backendAuthenticated) {
+    if (password !== account.password) {
+      toast("Password role tidak sesuai.");
+      return;
+    }
+    clearBackendAuthSession();
+  }
+
+  currentRole = authenticatedRole;
+  state.session = { role: authenticatedRole, authenticated: true, backendAuthenticated };
+  saveAuthSession(authenticatedRole);
+  activePage = authenticatedRole === "Owner" ? "owner" : rolePage(authenticatedRole);
   state.session.activePage = activePage;
-  saveCurrentTabSession(role, activePage);
-  els.roleSelect.value = role;
+  saveCurrentTabSession(authenticatedRole, activePage);
+  els.roleSelect.value = authenticatedRole;
   saveState();
   buildNavigation();
   renderAll();
   els.loginModal.close();
-  toast(`Berhasil masuk sebagai ${role}.`);
+  toast(`Berhasil masuk sebagai ${authenticatedRole}.`);
 }
 
 function visibleNavItems() {
@@ -2572,13 +2769,16 @@ async function uploadDashboardMedia(files, section, meta) {
 async function uploadTreatmentMedia(files, meta, section = "medis") {
   const backend = getBackendConfig();
   if (!backend.url) throw new Error("Isi Google Apps Script Web App URL di Settings untuk upload media.");
+  const sessionToken = getBackendSessionToken();
+  if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) throw new Error("Login backend diperlukan sebelum upload media.");
   const payloadFiles = await Promise.all(files.map(fileToPayload));
   const response = await fetch(backend.url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({
-      action: "uploadTreatmentMedia",
-      token: backend.token,
+      action: sessionToken ? "secureUploadTreatmentMedia" : "uploadTreatmentMedia",
+      token: CONFIG.BACKEND_AUTH_REQUIRED ? "" : backend.token,
+      sessionToken,
       meta: {
         section,
         date: meta.date,
@@ -2820,16 +3020,15 @@ function renderSettings() {
         ${textarea("platforms", "Platform List", state.settings.platforms)}
       </div>
 
-      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Atur username, password, status akun, dan akses menu setiap role.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Atur username, status akun, dan akses menu. Password diverifikasi oleh backend authentication.</p></div></div>
       <div class="table-wrap settings-table-wrap">
         <table class="settings-table">
-          <thead><tr><th>Role</th><th>Username</th><th>Password</th><th>Aktif</th></tr></thead>
+          <thead><tr><th>Role</th><th>Username</th><th>Aktif</th></tr></thead>
           <tbody>
             ${accounts.map((account, index) => `
               <tr>
                 <td><strong>${escapeHtml(account.role)}</strong></td>
                 <td><input name="account_${index}_username" value="${escapeHtml(account.username)}" autocomplete="off"></td>
-                <td><input name="account_${index}_password" value="${escapeHtml(account.password)}" autocomplete="new-password"></td>
                 <td><input name="account_${index}_enabled" type="checkbox" ${account.enabled ? "checked" : ""} ${account.role === "Owner" ? "disabled" : ""}></td>
               </tr>
             `).join("")}
@@ -2869,7 +3068,7 @@ function renderSettings() {
       return {
         role: account.role,
         username: String(formData.get(`account_${index}_username`) || account.username).trim() || account.username,
-        password: String(formData.get(`account_${index}_password`) || account.password),
+        password: "",
         enabled: account.role === "Owner" || formData.get(`account_${index}_enabled`) === "on",
         pages
       };
@@ -3869,6 +4068,10 @@ async function syncToGoogleSheets(options = {}) {
   const queue = getMutationQueue();
   if (queue.length) return flushMutationQueue(options);
   if (options.source === "auto") return true;
+  if (CONFIG.BACKEND_AUTH_REQUIRED) {
+    if (!options.silent) toast("Mode secure aktif. Perubahan dikirim melalui antrean secure setelah login backend.");
+    return true;
+  }
 
   try {
     const response = await fetchWithTimeout(backend.url, {
@@ -3928,12 +4131,18 @@ async function flushMutationQueue(options = {}) {
   }
 
   try {
+    const sessionToken = getBackendSessionToken();
+    if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) {
+      setSyncStatus({ pending: true, lastError: "Login backend diperlukan sebelum sync.", queueLength: getMutationQueue().length });
+      return false;
+    }
     const response = await fetchWithTimeout(backend.url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
-        action: "syncMutations",
-        token: backend.token,
+        action: sessionToken ? "secureSyncMutations" : "syncMutations",
+        token: CONFIG.BACKEND_AUTH_REQUIRED ? "" : backend.token,
+        sessionToken,
         schemaVersion: SYNC_SCHEMA_VERSION,
         requestId: `batch-${getDeviceId()}-${randomId()}`,
         deviceId: getDeviceId(),
@@ -4026,6 +4235,8 @@ async function fetchFromGoogleSheets(options = {}) {
     if (!options.silent) toast("Isi Google Apps Script Web App URL di Settings untuk mengambil data.");
     return null;
   }
+  const sessionToken = getBackendSessionToken();
+  if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) return null;
   const pendingQueue = getMutationQueue();
   if (pendingQueue.length && options.source === "startup") {
     setSyncStatus({
@@ -4040,8 +4251,9 @@ async function fetchFromGoogleSheets(options = {}) {
 
   try {
     const url = new URL(backend.url);
-    url.searchParams.set("action", "fetch");
-    if (backend.token) url.searchParams.set("token", backend.token);
+    url.searchParams.set("action", sessionToken ? "secureFetch" : "fetch");
+    if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) url.searchParams.set("token", backend.token);
+    if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
     url.searchParams.set("_", Date.now().toString());
 
     const response = await fetch(url.toString(), { cache: "no-store" });
@@ -4079,9 +4291,16 @@ function getBackendConfig() {
   };
 }
 
+function getBackendSessionToken() {
+  return loadBackendAuthSession()?.sessionToken || "";
+}
+
 function settingsForSync() {
   const { backendUrl, backendToken, ...safeSettings } = state.settings || {};
-  return safeSettings;
+  return {
+    ...safeSettings,
+    userAccounts: normalizeUserAccounts(safeSettings.userAccounts).map(({ password, ...account }) => account)
+  };
 }
 
 function searchRows(rows, keys) {
