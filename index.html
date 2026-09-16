@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="id" class="login-required">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -50,6 +50,7 @@ button { cursor: pointer; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 fieldset:disabled { opacity: .72; }
 .app-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 100vh; }
+html.login-required .app-shell { visibility: hidden; }
 .sidebar {
   position: sticky;
   top: 0;
@@ -859,14 +860,31 @@ let syncInProgress = false;
 let searchRenderTimer = null;
 let loginInProgress = false;
 let secureFetchInProgress = false;
+let datasetSessionGeneration = 0;
 const pendingSecureFetchDatasets = new Set();
+const datasetLoadState = new Map();
+const OWNER_TIER_1_DATASETS = ["manager", "marketing", "crm"];
+const OWNER_TIER_2_OPERATIONAL_DATASETS = ["content", "doctor", "medis", "inventory"];
+const OWNER_TIER_2_CONTROL_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
+const PAGE_PROGRESSIVE_TIERS = {
+  owner: [OWNER_TIER_1_DATASETS, OWNER_TIER_2_OPERATIONAL_DATASETS, OWNER_TIER_2_CONTROL_DATASETS],
+  manager: [["manager"], ["inventory", "doctor", "medis"]],
+  managerMarketing: [["managerMarketingDaily", "marketing", "crm"], ["content", "patientCommand", "managerDecisionLog", "ownerEscalation"]],
+  marketing: [["marketing"]],
+  content: [["content"]],
+  crm: [["crm"]],
+  doctor: [["doctor"]],
+  medis: [["medis"]],
+  inventory: [["inventory"]],
+  settings: [["inventory"]]
+};
 const OWNER_MANAGED_DATASETS = new Set(["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"]);
 const OWNER_NOTE_MAX_LENGTH = 160;
 const DATASET_KEYS = ["manager", "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm", "doctor", "medis", "inventory"];
 const DIVISION_DATASETS = ["marketing", "content", "crm", "doctor", "medis", "inventory"];
 const MANAGER_MARKETING_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const PAGE_DATASET_MAP = {
-  owner: DATASET_KEYS,
+  owner: OWNER_TIER_1_DATASETS,
   manager: ["manager", "inventory", "doctor", "medis"],
   managerMarketing: ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation", "marketing", "content", "crm"],
   marketing: ["marketing"],
@@ -938,17 +956,25 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   clearOldAppCaches();
   restoreSessionFromHash();
+  if (!isReloadNavigation()) {
+    clearBackendAuthSession();
+    clearSessionDatasetCache();
+    state.session = { role: currentRole, authenticated: false, activePage: "" };
+    saveState({ skipSync: true });
+  }
   await validateBackendSessionOnStart();
+  document.documentElement.classList.toggle("login-required", !state.session.authenticated);
   refreshLoginRoleOptions();
   els.roleSelect.value = currentRole;
   buildNavigation();
   bindGlobalEvents();
   initInstallExperience();
   registerServiceWorker();
+  if (state.session.authenticated) hydrateDatasetCacheFromState();
   renderAll();
   cleanupRenderedPage();
   if (!state.session.authenticated) openLogin(currentRole);
-  else startBackgroundDataLoad({ source: "startup" });
+  else startRoleAwareProgressiveLoad(activePage, "startup");
   initAutoSync();
 }
 
@@ -1506,24 +1532,86 @@ function datasetsForPage(pageId = activePage) {
   return [...new Set(mapped.filter(dataset => DATASET_KEYS.includes(dataset) && canViewDataset(dataset)))];
 }
 
-function startBackgroundDataLoad(options = {}) {
-  const datasets = options.datasets || datasetsForPage(activePage);
-  if (!datasets.length) return;
+function missingDatasets(datasets = []) {
+  return [...new Set(datasets)].filter(dataset => {
+    if (!DATASET_KEYS.includes(dataset) || !canViewDataset(dataset)) return false;
+    const metadata = datasetLoadState.get(dataset);
+    return !metadata?.loaded || metadata.invalidated;
+  });
+}
+
+function markDatasetsLoaded(datasets = []) {
+  const loadedAt = new Date().toISOString();
+  datasets.forEach(dataset => datasetLoadState.set(dataset, {
+    dataset,
+    loaded: true,
+    loading: false,
+    loadedAt,
+    invalidated: false
+  }));
+}
+
+function markDatasetsLoading(datasets = [], loading = true) {
+  datasets.forEach(dataset => {
+    const current = datasetLoadState.get(dataset) || { dataset, loaded: false, loadedAt: "", invalidated: false };
+    datasetLoadState.set(dataset, { ...current, loading: Boolean(loading) });
+  });
+}
+
+function invalidateDatasetCache(dataset) {
+  if (!DATASET_KEYS.includes(dataset)) return;
+  const current = datasetLoadState.get(dataset) || { dataset, loaded: false, loading: false, loadedAt: "" };
+  datasetLoadState.set(dataset, { ...current, loaded: false, loading: false, invalidated: true });
+}
+
+function clearSessionDatasetCache() {
+  datasetSessionGeneration += 1;
+  datasetLoadState.clear();
+  pendingSecureFetchDatasets.clear();
+  secureFetchInProgress = false;
+  DATASET_KEYS.forEach(dataset => { state[dataset] = []; });
+}
+
+function hydrateDatasetCacheFromState() {
+  DATASET_KEYS.forEach(dataset => {
+    if (Array.isArray(state[dataset]) && state[dataset].length) markDatasetsLoaded([dataset]);
+  });
+}
+
+function hasLoadedDatasets(datasets = []) {
+  return datasets.every(dataset => {
+    const metadata = datasetLoadState.get(dataset);
+    return metadata?.loaded && !metadata.invalidated;
+  });
+}
+
+async function startBackgroundDataLoad(options = {}) {
+  const requested = options.datasets || datasetsForPage(activePage);
+  const datasets = options.force ? [...new Set(requested)] : missingDatasets(requested);
+  if (!datasets.length) return null;
   if (secureFetchInProgress) {
     datasets.forEach(dataset => pendingSecureFetchDatasets.add(dataset));
-    return;
+    return null;
   }
+  const sessionGeneration = datasetSessionGeneration;
   secureFetchInProgress = true;
+  markDatasetsLoading(datasets, true);
   setSyncStatus({
     dataLoading: true,
     lastFetchStartedAt: new Date().toISOString(),
     lastFetchSource: options.source || "background"
   });
-  fetchFromGoogleSheets({
-    silent: true,
-    source: options.source || "background",
-    datasets
-  }).finally(() => {
+  try {
+    return await fetchFromGoogleSheets({
+      silent: true,
+      source: options.source || "background",
+      datasets,
+      includeSettings: activePage === "settings",
+      sessionGeneration
+    });
+  } finally {
+    if (sessionGeneration !== datasetSessionGeneration) return null;
+    markDatasetsLoading(datasets, false);
     secureFetchInProgress = false;
     setSyncStatus({ dataLoading: false });
     if (pendingSecureFetchDatasets.size) {
@@ -1531,7 +1619,26 @@ function startBackgroundDataLoad(options = {}) {
       pendingSecureFetchDatasets.clear();
       startBackgroundDataLoad({ source: "queued", datasets: pendingDatasets });
     }
-  });
+  }
+}
+
+async function startRoleAwareProgressiveLoad(pageId = activePage, source = "progressive", force = false) {
+  if (pageId === "reports") {
+    return startBackgroundDataLoad({ source: `${source}-reports`, datasets: datasetsForPage(pageId), force });
+  }
+  const tiers = PAGE_PROGRESSIVE_TIERS[pageId] || [datasetsForPage(pageId)];
+  for (let index = 0; index < tiers.length; index += 1) {
+    const datasets = tiers[index].filter(dataset => canViewDataset(dataset));
+    if (!datasets.length) continue;
+    const startedAt = performance.now();
+    await startBackgroundDataLoad({ source: `${source}-tier-${index + 1}`, datasets, force });
+    console.info("AFK role-aware progressive timing", {
+      page: pageId,
+      tier: index + 1,
+      datasets,
+      durationMs: Math.round(performance.now() - startedAt)
+    });
+  }
 }
 
 async function validateBackendSessionOnStart() {
@@ -1557,8 +1664,10 @@ async function validateBackendSessionOnStart() {
     return true;
   } catch {
     clearBackendAuthSession();
+    clearSessionDatasetCache();
     if (CONFIG.BACKEND_AUTH_REQUIRED) {
       state.session = { role: currentRole, authenticated: false, activePage: "" };
+      saveState({ skipSync: true });
     }
     return false;
   }
@@ -1649,7 +1758,10 @@ function collectAllDatasetColumns() {
 
 function mergeFetchedColumnMetadata(result) {
   const fetchedColumns = result.columns || result.headers || result.data?.columns || result.data?.headers || {};
-  state.backendColumns = normalizeBackendColumns(fetchedColumns);
+  state.backendColumns = {
+    ...normalizeBackendColumns(state.backendColumns || {}),
+    ...Object.fromEntries(Object.entries(fetchedColumns).filter(([dataset, columns]) => DATASET_KEYS.includes(dataset) && Array.isArray(columns)))
+  };
 }
 
 function migrateMarketingRows(targetState) {
@@ -1844,6 +1956,7 @@ function registerServiceWorker() {
 }
 
 function openLogin(role) {
+  document.documentElement.classList.add("login-required");
   refreshLoginRoleOptions();
   const requestedRole = normalizeRoleName(role);
   const selectedRole = getAccount(requestedRole)?.enabled ? requestedRole : "Owner";
@@ -1908,6 +2021,7 @@ async function handleLogout() {
   } catch (error) {
     if (!CONFIG.BACKEND_AUTH_REQUIRED) toast(error.message || "Logout backend gagal, session lokal dibersihkan.");
   } finally {
+    clearSessionDatasetCache();
     clearBackendAuthSession();
     localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(TAB_SESSION_KEY);
@@ -1915,6 +2029,7 @@ async function handleLogout() {
     if (String(window.name || "").startsWith(WINDOW_SESSION_PREFIX)) window.name = "";
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     state.session = { role: currentRole, authenticated: false, activePage: "" };
+    saveState({ skipSync: true });
     openLogin(currentRole);
     toast("Berhasil logout.");
   }
@@ -1944,6 +2059,7 @@ async function handleLogin(event) {
       backendAuthenticated = true;
       activePage = authenticatedRole === "Owner" ? "owner" : rolePage(authenticatedRole);
       saveBackendAuthSession(backendLogin.user, backendLogin.sessionToken, backendLogin.expiresAt, activePage);
+      clearSessionDatasetCache();
     }
   } catch (error) {
     if (CONFIG.BACKEND_AUTH_REQUIRED || !CONFIG.ALLOW_LEGACY_LOGIN_FALLBACK) {
@@ -1974,9 +2090,10 @@ async function handleLogin(event) {
   buildNavigation();
   const shellStartedAt = performance.now();
   try {
+    document.documentElement.classList.remove("login-required");
     renderAll();
     els.loginModal.close();
-    startBackgroundDataLoad({ source: "post-login", datasets: datasetsForPage(activePage) });
+    startRoleAwareProgressiveLoad(activePage, "post-login");
     reportLoginTiming({
       role: authenticatedRole,
       loginResponseMs: loginTiming?.loginResponseMs,
@@ -2035,7 +2152,7 @@ function buildNavigation() {
       els.sidebar.classList.remove("open");
       renderAll();
       if (state.session.authenticated) {
-        startBackgroundDataLoad({ source: "navigation", datasets: datasetsForPage(activePage) });
+        startRoleAwareProgressiveLoad(activePage, "navigation");
       }
     });
   });
@@ -2193,29 +2310,32 @@ function renderActivePage() {
 }
 function renderOwner() {
   const k = getKpis();
-  const alerts = getOwnerAlerts();
+  const tier1Ready = hasLoadedDatasets(OWNER_TIER_1_DATASETS);
+  const operationalReady = hasLoadedDatasets(OWNER_TIER_2_OPERATIONAL_DATASETS);
+  const controlReady = hasLoadedDatasets(OWNER_TIER_2_CONTROL_DATASETS);
+  const alerts = operationalReady ? getOwnerAlerts() : [];
   document.getElementById("ownerPage").innerHTML = `
-    ${renderOwnerControlTower(k)}
+    ${renderOwnerControlTower(k, { tier1Ready, operationalReady, controlReady })}
     ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
-      ${kpi("Revenue", compactMoney(k.revenue))}
-      ${kpi("Target Achievement", targetAchievementLabel(k))}
-      ${kpi("Total Leads", k.totalLeads)}
-      ${kpi("Qualified Leads", k.qualified)}
-      ${kpi("Booking", k.booking)}
-      ${kpi("Show-Up", k.showUp)}
-      ${kpi("Treatment", k.treatment)}
-      ${kpi("Repeat", k.repeat)}
-      ${kpi("Rebooking", k.rebooking)}
-      ${kpi("VIP", k.vip)}
-      ${kpi("Referral", k.referral)}
-      ${kpi("Ad Spend", compactMoney(k.adSpend))}
-      ${kpi("ROAS", `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x`)}
-      ${kpi("Top Campaign", topBy(state.marketing, "revenue", "name"))}
-      ${kpi("Top Treatment", topText(state.medis, "treatmentName"))}
-      ${kpi("Stock Critical", k.stockCritical)}
+      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : "Memuat...")}
+      ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
+      ${kpi("Total Leads", tier1Ready ? k.totalLeads : "Memuat...")}
+      ${kpi("Qualified Leads", tier1Ready ? k.qualified : "Memuat...")}
+      ${kpi("Booking", tier1Ready ? k.booking : "Memuat...")}
+      ${kpi("Show-Up", tier1Ready ? k.showUp : "Memuat...")}
+      ${kpi("Treatment", operationalReady ? k.treatment : "Memuat...")}
+      ${kpi("Repeat", tier1Ready ? k.repeat : "Memuat...")}
+      ${kpi("Rebooking", operationalReady ? k.rebooking : "Memuat...")}
+      ${kpi("VIP", tier1Ready ? k.vip : "Memuat...")}
+      ${kpi("Referral", tier1Ready ? k.referral : "Memuat...")}
+      ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : "Memuat...")}
+      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : "Memuat...")}
+      ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : "Memuat...")}
+      ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : "Memuat...")}
+      ${kpi("Stock Critical", operationalReady ? k.stockCritical : "Memuat...")}
     </div>
-    ${renderIntegratedOwnerDashboard()}<div class="two-col">
+    ${operationalReady ? renderIntegratedOwnerDashboard() : ownerLoadingSection("Integrated Owner Dashboard AFK", "Memuat rekonsiliasi operasional dan alert lintas divisi...")}<div class="two-col">
       ${chartCard("Funnel Klinik", "funnelChart")}
       ${chartCard("Revenue Mingguan", "revenueChart")}
     </div>
@@ -2224,36 +2344,40 @@ function renderOwner() {
       <div class="table-card">
         <h3>Tabel Alert</h3>
         <div class="alert-list">
-          ${alerts.map(([label, count]) => `<div class="alert-item"><strong>${label}</strong><span class="badge ${count ? "pending" : "done"}">${count}</span></div>`).join("")}
+          ${operationalReady ? alerts.map(([label, count]) => `<div class="alert-item"><strong>${label}</strong><span class="badge ${count ? "pending" : "done"}">${count}</span></div>`).join("") : `<div class="empty-state">Memuat alert operasional...</div>`}
         </div>
       </div>
     </div>`;
 }
 
-function renderOwnerControlTower(k) {
-  const problems = getOwnerTopProblems();
-  const decisions = getOwnerTopDecisions();
+function renderOwnerControlTower(k, readiness = {}) {
+  const problems = readiness.controlReady ? getOwnerTopProblems() : [];
+  const decisions = readiness.controlReady ? getOwnerTopDecisions() : [];
   return `<section class="integrated-owner owner-control-tower">
     ${sectionHead("Owner Control Tower", "Ringkasan bisnis bertingkat dari operasional, manager, hingga Owner agar keputusan utama dapat dilihat dalam satu halaman.")}
     <div class="kpi-grid">
-      ${kpi("Omzet Hari Ini", compactMoney(k.todayRevenue))}
-      ${kpi("Omzet Bulan Berjalan", compactMoney(k.monthlyRevenue))}
-      ${kpi("Progress Target", targetAchievementLabel(k))}
-      ${kpi("Forecast Akhir Bulan", compactMoney(k.forecastRevenue))}
-      ${kpi("Estimasi Profit", compactMoney(k.estimatedProfit))}
-      ${kpi("Cash In", compactMoney(k.cashIn))}
-      ${kpi("Outstanding Payment", compactMoney(k.outstandingPayment))}
-      ${kpi("Jumlah Pasien Hari Ini", k.todayPatients)}
-      ${kpi("Booking", k.booking)}
-      ${kpi("Show Up", k.showUp)}
-      ${kpi("Action Priority", problems.length)}
-      ${kpi("Alert Bisnis", k.businessAlerts)}
+      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : "Memuat...")}
+      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : "Memuat...")}
+      ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
+      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : "Memuat...")}
+      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : "Memuat...")}
+      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : "Memuat...")}
+      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : "Memuat...")}
+      ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : "Memuat...")}
+      ${kpi("Booking", readiness.tier1Ready ? k.booking : "Memuat...")}
+      ${kpi("Show Up", readiness.tier1Ready ? k.showUp : "Memuat...")}
+      ${kpi("Action Priority", readiness.controlReady ? problems.length : "Memuat...")}
+      ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : "Memuat...")}
     </div>
     <div class="two-col">
-      ${ownerListCard("Lima Masalah Terbesar", problems, "Belum ada masalah prioritas yang perlu ditindaklanjuti.")}
-      ${ownerListCard("Lima Keputusan Untuk Owner", decisions, "Belum ada keputusan yang menunggu perhatian Owner.")}
+      ${ownerListCard("Lima Masalah Terbesar", problems, readiness.controlReady ? "Belum ada masalah prioritas yang perlu ditindaklanjuti." : "Memuat data kontrol manager...")}
+      ${ownerListCard("Lima Keputusan Untuk Owner", decisions, readiness.controlReady ? "Belum ada keputusan yang menunggu perhatian Owner." : "Memuat keputusan dan eskalasi...")}
     </div>
   </section>`;
+}
+
+function ownerLoadingSection(title, message) {
+  return `<section class="integrated-owner">${sectionHead(title, message)}<div class="empty-state">${escapeHtml(message)}</div></section>`;
 }
 
 function ownerListCard(title, items, emptyText) {
@@ -3515,10 +3639,14 @@ function canManageDataset(dataset) {
 function renderCharts() {
   if (activePage === "owner") {
     const kpis = getKpis();
-    const sourceRows = getLeadSourceRows();
-    makeChart("funnelChart", "bar", ["Lead", "Qualified", "Booking", "Show Up", "Treatment", "Rebooking", "Referral"], [kpis.totalLeads, kpis.qualified, kpis.booking, kpis.showUp, kpis.treatment, kpis.rebooking, kpis.referral]);
-    makeChart("revenueChart", "line", state.crm.map(x => x.date), state.crm.map(x => x.revenue), true);
-    makeChart("sourceChart", "doughnut", sourceRows.map(row => row.source), sourceRows.map(row => row.total));
+    if (hasLoadedDatasets(OWNER_TIER_1_DATASETS)) {
+      const sourceRows = getLeadSourceRows();
+      makeChart("revenueChart", "line", state.crm.map(x => x.date), state.crm.map(x => x.revenue), true);
+      makeChart("sourceChart", "doughnut", sourceRows.map(row => row.source), sourceRows.map(row => row.total));
+    }
+    if (hasLoadedDatasets([...OWNER_TIER_1_DATASETS, ...OWNER_TIER_2_OPERATIONAL_DATASETS])) {
+      makeChart("funnelChart", "bar", ["Lead", "Qualified", "Booking", "Show Up", "Treatment", "Rebooking", "Referral"], [kpis.totalLeads, kpis.qualified, kpis.booking, kpis.showUp, kpis.treatment, kpis.rebooking, kpis.referral]);
+    }
   }
   if (activePage === "marketing") {
     makeChart("spendRevenueChart", "bar", state.marketing.map(x => x.name), state.marketing.map(x => x.spend), false, state.marketing.map(x => x.revenue));
@@ -4272,6 +4400,8 @@ async function flushMutationQueue(options = {}) {
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Sync mutation gagal.");
     const acceptedIds = new Set(result.acceptedIds || ready.map(item => item.id));
+    [...new Set(ready.filter(item => acceptedIds.has(item.id)).map(item => item.dataset))]
+      .forEach(invalidateDatasetCache);
     const remaining = getMutationQueue().filter(item => !acceptedIds.has(item.id));
     setMutationQueue(remaining);
     setSyncStatus({
@@ -4369,6 +4499,7 @@ async function fetchFromGoogleSheets(options = {}) {
   }
 
   const fetchStartedAt = performance.now();
+  const sessionGeneration = Number.isFinite(options.sessionGeneration) ? options.sessionGeneration : datasetSessionGeneration;
   try {
     const url = new URL(backend.url);
     url.searchParams.set("action", sessionToken ? "secureFetch" : "fetch");
@@ -4376,17 +4507,20 @@ async function fetchFromGoogleSheets(options = {}) {
     if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
     const requestedDatasets = [...new Set((options.datasets || []).filter(dataset => DATASET_KEYS.includes(dataset)))];
     if (requestedDatasets.length) url.searchParams.set("datasets", requestedDatasets.join(","));
+    if (options.includeSettings) url.searchParams.set("includeSettings", "true");
     url.searchParams.set("_", Date.now().toString());
 
     const response = await fetch(url.toString(), { cache: "no-store" });
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
+    if (sessionGeneration !== datasetSessionGeneration || !state.session.authenticated) return null;
 
     state = {
       ...state,
       ...result.data,
       session: state.session
     };
+    markDatasetsLoaded(requestedDatasets.filter(dataset => Object.prototype.hasOwnProperty.call(result.data || {}, dataset)));
     normalizeDashboardState(state);
     mergeFetchedColumnMetadata(result);
     delete state.settings.backendUrl;
