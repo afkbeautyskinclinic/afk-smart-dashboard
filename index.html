@@ -3455,6 +3455,21 @@ function renderSettings() {
   });
 }
 function formCard(id, title, section, fields) {
+  const ownerNoteMode = currentRole === "Owner" && DIVISION_DATASETS.includes(section);
+  if (ownerNoteMode) {
+    const ownerFields = fields.filter(field => field && field.includes('name="ownerNote"'));
+    const reportFields = fields.filter(field => field && !field.includes('name="ownerNote"'));
+    return `<form class="form-card" id="${id}" data-owner-note-dataset="${section}">
+      <div class="section-head"><div><h2>${title}</h2><p>Mode lihat. Owner hanya dapat mengisi Catatan Owner.</p></div></div>
+      <fieldset disabled>
+        <div class="form-grid">${reportFields.join("")}</div>
+      </fieldset>
+      <fieldset>
+        <div class="form-grid">${ownerFields.join("")}</div>
+        <div class="form-actions"><button class="primary-button">Simpan Catatan Owner</button></div>
+      </fieldset>
+    </form>`;
+  }
   const disabled = canEdit(section) ? "" : "disabled";
   const note = canEdit(section) ? "Role ini bisa input data." : `Mode lihat. Input hanya untuk role ${sectionLabel(section)}.`;
   return `<form class="form-card" id="${id}">
@@ -3563,10 +3578,15 @@ function bindForm(id, handler) {
   bindMoneyInputs(form);
   form.addEventListener("submit", async event => {
     event.preventDefault();
-    if (form.querySelector("fieldset").disabled) return;
+    const ownerNoteDataset = form.dataset.ownerNoteDataset;
+    if (!ownerNoteDataset && form.querySelector("fieldset").disabled) return;
     const submitButton = form.querySelector(".primary-button");
     if (submitButton) submitButton.disabled = true;
     try {
+      if (ownerNoteDataset) {
+        saveOwnerNoteToLatestReport(ownerNoteDataset, formValues(form));
+        return;
+      }
       await handler(formValues(form), formFiles(form), form);
     } catch (error) {
       toast(error.message || "Form gagal diproses.");
@@ -3578,6 +3598,20 @@ function bindForm(id, handler) {
   bindDeletes();
   bindEdits();
   bindOwnerNotes();
+}
+
+function saveOwnerNoteToLatestReport(dataset, data) {
+  if (currentRole !== "Owner" || !DIVISION_DATASETS.includes(dataset)) throw new Error("Akses Catatan Owner tidak diizinkan.");
+  if (!state[dataset]?.length) throw new Error("Belum ada laporan divisi yang dapat diberi Catatan Owner.");
+  const row = state[dataset][0];
+  const previousRow = { ...row };
+  ensureRecordIdentity(previousRow, dataset);
+  row.ownerNote = ownerNoteValue(data.ownerNote);
+  ensureRecordIdentity(row, dataset);
+  enqueueSyncMutation(dataset, "update", row, previousRow);
+  saveState();
+  renderAll();
+  toast("Catatan Owner berhasil disimpan pada laporan terbaru.");
 }
 
 function formValues(form) {
