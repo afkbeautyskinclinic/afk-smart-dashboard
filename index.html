@@ -2138,6 +2138,7 @@ async function handleLogin(event) {
   const account = getAccount(role);
   const password = els.passwordInput.value;
   if (!account || account.enabled === false) {
+    setLoginLoading(false, "Akun role tidak aktif.");
     toast("Akun role tidak aktif.");
     return;
   }
@@ -2160,15 +2161,16 @@ async function handleLogin(event) {
   } catch (error) {
     if (CONFIG.BACKEND_AUTH_REQUIRED || !CONFIG.ALLOW_LEGACY_LOGIN_FALLBACK) {
       clearBackendAuthSession();
-      setLoginLoading(false);
-      toast(error.message || "Login backend gagal.");
+      const message = error.message || "Login backend gagal.";
+      setLoginLoading(false, message);
+      toast(message);
       return;
     }
   }
 
   if (!backendAuthenticated) {
     if (password !== account.password) {
-      setLoginLoading(false);
+      setLoginLoading(false, "Password role tidak sesuai.");
       toast("Password role tidak sesuai.");
       return;
     }
