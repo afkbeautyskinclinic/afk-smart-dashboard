@@ -2353,7 +2353,7 @@ function canOwnerNote() {
 }
 
 function canWriteEscalationNote(dataset) {
-  if (currentRole === "Owner") return OWNER_MANAGED_DATASETS.has(dataset);
+  if (currentRole === "Owner") return DIVISION_DATASETS.includes(dataset);
   if (isManagerRole()) return DIVISION_DATASETS.includes(dataset);
   return false;
 }
