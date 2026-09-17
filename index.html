@@ -68,7 +68,15 @@ html.login-required .app-shell { visibility: hidden; }
 .brand img { width: 54px; height: 54px; object-fit: contain; filter: drop-shadow(0 8px 14px rgba(185,140,37,.22)); }
 .brand strong { display: block; font-size: 18px; letter-spacing: 0; font-weight: 760; }
 .brand span, .title-block span, .role-box span, .sync-panel small { color: var(--muted); font-size: 12px; }
-.nav-list { display: grid; gap: 8px; }
+.nav-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 4px;
+}
 .nav-item {
   border: 0;
   background: transparent;
@@ -916,6 +924,7 @@ const EDITABLE_REPORT_FIELDS = {
   inventory: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","performanceNote","mediaLinks","bottleneck","ownerNote"]
 };
 const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
+const MONEY_REPORT_FIELDS = new Set(["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired","targetDate","deadline"]);
 const TEXTAREA_REPORT_FIELDS = new Set(["address","note","activityReport","performanceNote","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
 const INTERNAL_FIELDS = new Set(["__index", "__readonly", "_syncId", "_createdAt", "_updatedAt"]);
@@ -2287,7 +2296,7 @@ function getAccessibleReportDatasets() {
 
 function canEdit(section) {
   const map = { manager: "Manager Finance & Operational", managerMarketingDaily: "Manager Marketing", patientCommand: "Manager Marketing", managerDecisionLog: "Manager Marketing", ownerEscalation: "Manager Marketing", marketing: "Digital Marketing", content: "Creative Performance", crm: "CRM", doctor: "Dokter", medis: "Medis", inventory: "Inventory" };
-  if (currentRole === "Owner") return OWNER_MANAGED_DATASETS.has(section);
+  if (currentRole === "Owner") return section === "ownerEscalation";
   if (section === "ownerEscalation" && currentRole === "Manager Finance & Operational") return true;
   return currentRole === map[section];
 }
@@ -3549,6 +3558,7 @@ function tableCell(dataset, row, col) {
 function bindForm(id, handler) {
   const form = document.getElementById(id);
   if (!form) return;
+  bindMoneyInputs(form);
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (form.querySelector("fieldset").disabled) return;
@@ -3571,7 +3581,7 @@ function bindForm(id, handler) {
 function formValues(form) {
   const data = {};
   new FormData(form).forEach((value, key) => {
-    if (!(value instanceof File)) data[key] = value;
+    if (!(value instanceof File)) data[key] = MONEY_REPORT_FIELDS.has(key) ? parseMoneyInput(value) : value;
   });
   return data;
 }
@@ -3650,6 +3660,7 @@ function openEditReport(dataset, index) {
   </form>`;
 
   const form = modal.querySelector("#editReportForm");
+  bindMoneyInputs(form);
   modal.querySelector("#cancelEditReport").addEventListener("click", () => modal.close());
   form.addEventListener("submit", event => {
     event.preventDefault();
@@ -3697,12 +3708,37 @@ function editReportField(field, value, dataset = "") {
   if (TEXTAREA_REPORT_FIELDS.has(field)) {
     return `<label>${escapeHtml(label(field, dataset))}<textarea name="${safeName}"${maxLength}>${escapeHtml(safeValue)}</textarea></label>`;
   }
+  if (MONEY_REPORT_FIELDS.has(field)) return `<label>${escapeHtml(label(field, dataset))}<input name="${safeName}" type="text" inputmode="numeric" data-money-input value="${escapeHtml(formatMoneyInput(safeValue))}"${maxLength}></label>`;
   const type = DATE_REPORT_FIELDS.has(field) ? "date" : NUMERIC_REPORT_FIELDS.has(field) ? "number" : "text";
   return `<label>${escapeHtml(label(field, dataset))}<input name="${safeName}" type="${type}" value="${escapeHtml(safeValue)}"${maxLength}></label>`;
 }
 
+function parseMoneyInput(value) {
+  const cleaned = String(value ?? "").replace(/[^\d-]/g, "");
+  if (!cleaned || cleaned === "-") return 0;
+  return Number(cleaned) || 0;
+}
+
+function formatMoneyInput(value) {
+  const amount = parseMoneyInput(value);
+  if (!amount && !String(value ?? "").replace(/\D/g, "")) return "";
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(amount);
+}
+
+function bindMoneyInputs(root = document) {
+  root.querySelectorAll("[data-money-input]").forEach(inputEl => {
+    if (inputEl.dataset.moneyBound === "true") return;
+    inputEl.dataset.moneyBound = "true";
+    inputEl.value = formatMoneyInput(inputEl.value);
+    inputEl.addEventListener("input", () => {
+      inputEl.value = formatMoneyInput(inputEl.value);
+    });
+  });
+}
+
 function normalizeEditValue(field, value) {
   if (field === "ownerNote") return ownerNoteValue(value);
+  if (MONEY_REPORT_FIELDS.has(field)) return parseMoneyInput(value);
   if (NUMERIC_REPORT_FIELDS.has(field)) return num(value);
   return String(value ?? "");
 }
@@ -3738,7 +3774,7 @@ function canDelete(dataset) {
 }
 
 function canManageDataset(dataset) {
-  return (currentRole === "Owner" && OWNER_MANAGED_DATASETS.has(dataset)) || (currentRole === "Manager Finance & Operational" && ["manager", "ownerEscalation"].includes(dataset)) || (currentRole === "Manager Marketing" && MANAGER_MARKETING_DATASETS.includes(dataset));
+  return (currentRole === "Owner" && dataset === "ownerEscalation") || (currentRole === "Manager Finance & Operational" && ["manager", "ownerEscalation"].includes(dataset)) || (currentRole === "Manager Marketing" && MANAGER_MARKETING_DATASETS.includes(dataset));
 }
 
 function renderCharts() {
@@ -3852,6 +3888,9 @@ function chartCard(title, id) {
   return `<div class="chart-card"><h3>${title}</h3><canvas id="${id}"></canvas></div>`;
 }
 function input(name, text, type = "text", value = "") {
+  if (type === "number" && MONEY_REPORT_FIELDS.has(name)) {
+    return `<label>${text}<input name="${name}" type="text" inputmode="numeric" data-money-input value="${escapeHtml(formatMoneyInput(value))}"></label>`;
+  }
   return `<label>${text}<input name="${name}" type="${type}" value="${escapeHtml(value)}" ${type === "date" ? "" : ""}></label>`;
 }
 function fileInput(name, text, accept = "", multiple = false) {
