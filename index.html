@@ -921,10 +921,10 @@ const EDITABLE_REPORT_FIELDS = {
   content: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","title","platform","format","hook","cta","asset","publishDate","views","reach","likes","comments","shares","saves","leads","status","performanceNote","mediaLinks","ownerNote"],
   crm: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","gender","address","wa","interest","productInterest","status","category","responseLead","followUp","doctor","nurseBeautician","upSellingCrossSelling","revenue","voiceOfPatient","performanceNote","mediaLinks","bottleneck","ownerNote"],
   doctor: ["date","doctorName","activityReport","dailyOmzet","dailyExpense","patientName","bookingId","treatmentName","nurseAssistant","productsTools","medicineGiven","status","complaint","aftercare","rebooking","performanceNote","bottleneck","mediaLinks","ownerNote"],
-  medis: ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"],
-  inventory: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","minimum","expired","performanceNote","mediaLinks","bottleneck","ownerNote"]
+  medis: ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","pharmacyItemName","pharmacyQty","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"],
+  inventory: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","pharmacyItemName","pharmacyQty","minimum","expired","performanceNote","mediaLinks","bottleneck","ownerNote"]
 };
-const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","minimum"]);
+const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","pharmacyQty","minimum"]);
 const MONEY_REPORT_FIELDS = new Set(["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired","targetDate","deadline"]);
 const TEXTAREA_REPORT_FIELDS = new Set(["address","note","activityReport","performanceNote","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
@@ -2524,6 +2524,7 @@ function renderIntegratedOwnerDashboard() {
       ${kpi("Aftercare Missing", metrics.aftercareMissing)}
     </div>
     ${tableCard("Cross-Division Reconciliation", "integratedOwner", reconciliationRows, ["area","sourceA","valueA","sourceB","valueB","gap","status","action"])}
+    ${tableCard("Rekonsiliasi Barang Apotek", "pharmacyReconciliation", getPharmacyReconciliationRows(), ["pharmacyItemName","inventoryQty","medicalQty","gap","status","action"])}
     <div class="table-card">
       <div class="section-head"><div><h2>Decision Alerts</h2><p>Alert prioritas untuk Owner dan Manager berdasarkan koneksi data antar dashboard.</p></div></div>
       <div class="control-alerts">
@@ -2554,8 +2555,10 @@ function renderManager() {
       ${kpi("Laba / Rugi", compactMoney(k.profitLoss))}
       ${kpi("Anggaran Bulanan", moneyOrMissing(k.monthlyBudget, "Belum ada anggaran"))}
       ${kpi("Outstanding Operasional", k.openOperationalIssues)}
+      ${kpi("Selisih Barang Apotek", getPharmacyReconciliationRows().filter(row => row.status !== "Selaras").length)}
     </div>
     ${managerForm()}
+    ${tableCard("Rekonsiliasi Barang Apotek", "pharmacyReconciliation", getPharmacyReconciliationRows(), ["pharmacyItemName","inventoryQty","medicalQty","gap","status","action"])}
     ${tableCard("Laporan Manager Finance & Operational", "manager", rows, ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"])}
     ${ownerEscalationForm("financeOwnerEscalationForm", "Nama Manager Finance & Operational")}
     ${tableCard("Owner Escalation", "ownerEscalation", escalationRows, ["date","managerName","topic","reason","supportingData","urgency","requestedDecision","status","ownerResponse","followUp","ownerNote"])}
@@ -3077,7 +3080,7 @@ function renderMedis() {
     </div>
     ${medisForm()}
     ${tableCard("Jadwal Treatment Sederhana", "medisSchedule", rows.filter(x => !isTreatmentDone(x.status)), ["date","userName","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status"])}
-    ${tableCard("Treatment Report", "medis", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Treatment Report", "medis", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","patientId","bookingId","treatmentName","doctor","nurseBeautician","room","status","products","pharmacyItemName","pharmacyQty","aftercare","upsales","rebooking","complaint","performanceNote","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("medisForm", addMedis);
 }
@@ -3097,6 +3100,8 @@ function medisForm() {
     input("room", "Ruangan"),
     select("status", "Status Treatment", ["Selesai", "Ditunda", "Batal"]),
     input("products", "Produk/Alat Terpakai"),
+    input("pharmacyItemName", "Nama Barang Apotek"),
+    input("pharmacyQty", "Qty", "number"),
     input("aftercare", "Catatan Aftercare"),
     input("upsales", "Up Sales", "number"),
     input("rebooking", "Rekomendasi Rebooking"),
@@ -3112,6 +3117,7 @@ async function addMedis(data, fileFields = {}) {
   data.dailyOmzet = num(data.dailyOmzet);
   data.dailyExpense = num(data.dailyExpense);
   data.upsales = num(data.upsales);
+  data.pharmacyQty = num(data.pharmacyQty);
   const mediaFiles = fileFields.mediaFiles || [];
   data.mediaLinks = "";
   if (mediaFiles.length) {
@@ -3192,7 +3198,7 @@ function renderInventory() {
     </div>
     ${inventoryForm()}
     ${tableCard("Alert Stok Menipis & Expired Date", "inventoryAlerts", rows.filter(x => stockStatus(x) !== "Aman" || expiringSoon(x)), ["date","userName","id","name","category","finalStock","minimum","expired","stockStatus"])}
-    ${tableCard("Current Stock", "inventory", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","finalStock","minimum","expired","stockStatus","performanceNote","mediaLinks","bottleneck","ownerNote"])}
+    ${tableCard("Current Stock", "inventory", rows, ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","pharmacyItemName","pharmacyQty","finalStock","minimum","expired","stockStatus","performanceNote","mediaLinks","bottleneck","ownerNote"])}
   `;
   bindForm("inventoryForm", addInventory);
 }
@@ -3212,6 +3218,8 @@ function inventoryForm() {
     input("initial", "Stok Awal", "number"),
     input("inQty", "Stock In", "number"),
     input("outQty", "Stock Out", "number"),
+    input("pharmacyItemName", "Nama Barang Apotek"),
+    input("pharmacyQty", "Qty", "number"),
     input("minimum", "Minimum Stock", "number"),
     input("expired", "Expired Date", "date"),
     textarea("performanceNote", "Catatan Kinerja Harian"),
@@ -3222,7 +3230,7 @@ function inventoryForm() {
 }
 
 async function addInventory(data, fileFields = {}) {
-  ["dailyOmzet","dailyExpense","initial","inQty","outQty","minimum"].forEach(key => data[key] = num(data[key]));
+  ["dailyOmzet","dailyExpense","initial","inQty","outQty","pharmacyQty","minimum"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "inventory", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.inventory.unshift(row);
@@ -3345,29 +3353,10 @@ function renderSettings() {
     `;
     return;
   }
-  const backend = getBackendConfig();
-  const syncStatus = getSyncStatus();
   const accounts = getUserAccounts();
   const accessPages = NAV.filter(item => item.id !== "settings");
   page.innerHTML = `
-    ${sectionHead("Setting", "Konfigurasi akun, hak akses, profil klinik, dan sinkronisasi backend.")}
-    <div class="settings-card install-guide">
-      <h2>Status Sistem</h2>
-      <div class="three-col">
-        <div>
-          <strong>Backend</strong>
-          <p>${backend.url && backend.token ? "Connected to Google Workspace" : "Belum terhubung"}</p>
-        </div>
-        <div>
-          <strong>Sinkronisasi</strong>
-          <p>${syncStatus.pending ? `${formatNumber(syncStatus.queueLength || getOwnedMutationQueue().length)} perubahan menunggu sync` : "Tidak ada antrian sinkronisasi"}</p>
-        </div>
-        <div>
-          <strong>Update Terakhir</strong>
-          <p>${escapeHtml(syncStatus.lastSuccessAt || syncStatus.lastFetchAt || "Belum ada catatan sync")}</p>
-        </div>
-      </div>
-    </div>
+    ${sectionHead("Setting", "Konfigurasi akun, hak akses, dan profil klinik.")}
     <form class="settings-card form-card" id="settingsForm">
       <div class="section-head"><div><h2>Profil Klinik</h2><p>Identitas klinik yang tampil di aplikasi dan ikut tersimpan ke backend.</p></div></div>
       <div class="form-grid">
@@ -3389,15 +3378,16 @@ function renderSettings() {
         ${textarea("platforms", "Platform List", state.settings.platforms)}
       </div>
 
-      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Atur username, status akun, dan akses menu. Password diverifikasi oleh backend authentication.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Owner dan Inventory dapat mengatur username, password baru, status akun, dan akses menu. Kosongkan password jika tidak ingin mengubahnya.</p></div></div>
       <div class="table-wrap settings-table-wrap">
         <table class="settings-table">
-          <thead><tr><th>Role</th><th>Username</th><th>Aktif</th></tr></thead>
+          <thead><tr><th>Role</th><th>Username</th><th>Password Baru</th><th>Aktif</th></tr></thead>
           <tbody>
             ${accounts.map((account, index) => `
               <tr>
                 <td><strong>${escapeHtml(account.role)}</strong></td>
                 <td><input name="account_${index}_username" value="${escapeHtml(account.username)}" autocomplete="off"></td>
+                <td><input name="account_${index}_password" type="password" value="" minlength="8" maxlength="128" autocomplete="new-password" placeholder="Kosongkan jika tetap"></td>
                 <td><input name="account_${index}_enabled" type="checkbox" ${account.enabled ? "checked" : ""} ${account.role === "Owner" ? "disabled" : ""}></td>
               </tr>
             `).join("")}
@@ -3426,47 +3416,86 @@ function renderSettings() {
       </div>
     </form>
   `;
-  document.getElementById("settingsForm").addEventListener("submit", event => {
+  document.getElementById("settingsForm").addEventListener("submit", async event => {
     event.preventDefault();
+    const submitButton = event.currentTarget.querySelector(".primary-button");
+    if (submitButton) submitButton.disabled = true;
     const formData = new FormData(event.currentTarget);
-    const updatedAccounts = getUserAccounts().map((account, index) => {
+    const existingAccounts = getUserAccounts();
+    const authChanges = [];
+    const updatedAccounts = existingAccounts.map((account, index) => {
       const pages = accessPages
         .filter(item => formData.get(`access_${index}_${item.id}`) === "on")
         .map(item => item.id);
       if (isSettingsRole(account.role) && !pages.includes("settings")) pages.push("settings");
+      const username = String(formData.get(`account_${index}_username`) || account.username).trim() || account.username;
+      const newPassword = String(formData.get(`account_${index}_password`) || "");
+      const enabled = account.role === "Owner" || formData.get(`account_${index}_enabled`) === "on";
+      if (username !== account.username || newPassword || enabled !== account.enabled) {
+        authChanges.push({ role: account.role, originalUsername: account.username, username, newPassword, active: enabled });
+      }
       return {
         role: account.role,
-        username: String(formData.get(`account_${index}_username`) || account.username).trim() || account.username,
+        username,
         password: "",
-        enabled: account.role === "Owner" || formData.get(`account_${index}_enabled`) === "on",
+        enabled,
         pages
       };
     });
-    state.settings = {
-      ...state.settings,
-      clinicName: formData.get("clinicName"),
-      brandName: formData.get("brandName"),
-      primaryColor: formData.get("primaryColor"),
-      clinicPhone: formData.get("clinicPhone"),
-      clinicEmail: formData.get("clinicEmail"),
-      clinicAddress: formData.get("clinicAddress"),
-      clinicDescription: formData.get("clinicDescription"),
-      divisions: formData.get("divisions"),
-      pics: formData.get("pics"),
-      treatments: formData.get("treatments"),
-      sources: formData.get("sources"),
-      platforms: formData.get("platforms"),
-      userAccounts: normalizeUserAccounts(updatedAccounts)
-    };
-    normalizeDashboardState(state);
-    refreshLoginRoleOptions();
-    if (!canAccessPage(activePage)) activePage = resolveInitialActivePage();
-    enqueueSyncMutation("settings", "settingsUpdate", settingsForSync());
-    saveState();
-    buildNavigation();
-    renderAll();
-    toast("Settings berhasil disimpan.");
+    try {
+      if (authChanges.length) {
+        const authResult = await updateBackendAuthUsers(authChanges);
+        if (authResult.callerSessionRevoked) {
+          clearBackendAuthSession();
+          state.session = { role: "Owner", authenticated: false };
+          saveState();
+          openLogin("Username/password akun aktif berubah. Silakan masuk kembali.");
+          return;
+        }
+      }
+      state.settings = {
+        ...state.settings,
+        clinicName: formData.get("clinicName"),
+        brandName: formData.get("brandName"),
+        primaryColor: formData.get("primaryColor"),
+        clinicPhone: formData.get("clinicPhone"),
+        clinicEmail: formData.get("clinicEmail"),
+        clinicAddress: formData.get("clinicAddress"),
+        clinicDescription: formData.get("clinicDescription"),
+        divisions: formData.get("divisions"),
+        pics: formData.get("pics"),
+        treatments: formData.get("treatments"),
+        sources: formData.get("sources"),
+        platforms: formData.get("platforms"),
+        userAccounts: normalizeUserAccounts(updatedAccounts)
+      };
+      normalizeDashboardState(state);
+      refreshLoginRoleOptions();
+      if (!canAccessPage(activePage)) activePage = resolveInitialActivePage();
+      enqueueSyncMutation("settings", "settingsUpdate", settingsForSync());
+      saveState();
+      buildNavigation();
+      renderAll();
+      toast("Settings dan akun pengguna berhasil disimpan.");
+    } catch (error) {
+      toast(error.message || "Settings gagal disimpan.");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
   });
+}
+
+async function updateBackendAuthUsers(accounts) {
+  const backend = getBackendConfig();
+  const sessionToken = getBackendSessionToken();
+  if (!backend.url || !sessionToken) throw new Error("Sesi backend diperlukan untuk mengubah akun pengguna.");
+  const result = await requestBackendJson(backend.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "secureUpdateAuthUsers", sessionToken, accounts })
+  }, { timeoutMs: 60000, retries: 0, label: "Pembaruan akun pengguna" });
+  if (!result.ok) throw new Error(result.error || "Pembaruan akun pengguna gagal.");
+  return result;
 }
 function formCard(id, title, section, fields) {
   const ownerNoteMode = currentRole === "Owner" && DIVISION_DATASETS.includes(section);
@@ -4262,6 +4291,9 @@ function getIntegratedOwnerControlRows() {
   const marketingShowUp = sum(state.marketing, "showUp");
   const marketingTreatment = sum(state.marketing, "treatment");
   const revenue = getRevenueAlignment();
+  const pharmacy = getPharmacyReconciliationRows();
+  const pharmacyIssued = pharmacy.reduce((total, row) => total + num(row.inventoryQty), 0);
+  const pharmacyUsed = pharmacy.reduce((total, row) => total + num(row.medicalQty), 0);
   return [
     integratedRow("Lead masuk", "Marketing", sum(state.marketing, "leads"), "CRM", state.crm.length, "Cek apakah semua lead iklan masuk CRM"),
     integratedRow("Qualified lead", "Marketing", sum(state.marketing, "qualified"), "CRM", state.crm.filter(row => ["Konsultasi", "Booking", "Show Up", "Treatment"].includes(row.responseLead)).length, "Samakan definisi qualified lead"),
@@ -4270,8 +4302,32 @@ function getIntegratedOwnerControlRows() {
     integratedRow("Treatment", "CRM", crmTreatment, "Dokter", doctorDone, "Cek pasien treatment yang belum masuk laporan dokter"),
     integratedRow("Treatment Handover", "Dokter", doctorDone, "Tim Medis", medisDone, "Pastikan tindakan dokter sudah dihandover ke tim medis"),
     integratedRow("Aftercare", "Treatment Selesai", medisDone, "Aftercare Terisi", medisDone - getAftercareMissingRows().length, "Lengkapi catatan aftercare pasien"),
-    integratedRow("Revenue", "Manager", revenue.managerRevenue, "CRM + Marketing + Medis", revenue.operationalRevenue, "Rekonsiliasi revenue operasional dengan laporan manager")
+    integratedRow("Revenue", "Manager", revenue.managerRevenue, "CRM + Marketing + Medis", revenue.operationalRevenue, "Rekonsiliasi revenue operasional dengan laporan manager"),
+    integratedRow("Barang Apotek", "Inventory Keluar", pharmacyIssued, "Tim Medis Terpakai", pharmacyUsed, "Cocokkan nama barang dan qty yang dikeluarkan dengan pemakaian treatment")
   ];
+}
+
+function getPharmacyReconciliationRows() {
+  const byItem = new Map();
+  const add = (name, field, qty) => {
+    const labelName = String(name || "").trim();
+    if (!labelName) return;
+    const key = normalizeSearchText(labelName);
+    const current = byItem.get(key) || { pharmacyItemName: labelName, inventoryQty: 0, medicalQty: 0 };
+    current[field] += num(qty);
+    byItem.set(key, current);
+  };
+  state.inventory.forEach(row => add(row.pharmacyItemName, "inventoryQty", row.pharmacyQty));
+  state.medis.forEach(row => add(row.pharmacyItemName, "medicalQty", row.pharmacyQty));
+  return [...byItem.values()].map(row => {
+    const gap = num(row.inventoryQty) - num(row.medicalQty);
+    return {
+      ...row,
+      gap,
+      status: gap === 0 ? "Selaras" : "Perlu Cek",
+      action: gap === 0 ? "Tidak ada tindakan korektif." : gap > 0 ? "Periksa sisa barang atau pemakaian yang belum dilaporkan Tim Medis." : "Periksa pengeluaran Inventory yang belum dicatat."
+    };
+  }).sort((a, b) => Math.abs(num(b.gap)) - Math.abs(num(a.gap)) || a.pharmacyItemName.localeCompare(b.pharmacyItemName));
 }
 
 function integratedRow(area, sourceA, valueA, sourceB, valueB, action) {
@@ -5012,6 +5068,10 @@ function label(key, dataset = "") {
     stockStatus: "Status Stok",
     inQty: "Stock In",
     outQty: "Stock Out",
+    pharmacyItemName: "Nama Barang Apotek",
+    pharmacyQty: "Qty",
+    inventoryQty: "Qty Keluar Inventory",
+    medicalQty: "Qty Digunakan Tim Medis",
     treatmentName: "Treatment",
     patientId: "Nama Pasien",
     bookingId: "Booking ID",
