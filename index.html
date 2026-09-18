@@ -1269,7 +1269,7 @@ function addSyncDeadLetters(items = []) {
   const existing = getSyncDeadLetters();
   const byId = new Map(existing.map(item => [item.id, item]));
   items.forEach(item => byId.set(item.id, { ...item, failedAt: new Date().toISOString() }));
-  localStorage.setItem(SYNC_DEAD_LETTER_KEY, JSON.stringify([...byId.values()].slice(-200)));
+  localStorage.setItem(SYNC_DEAD_LETTER_KEY, JSON.stringify([...byId.values()]));
 }
 
 function initSyncCoordination() {
@@ -3647,10 +3647,9 @@ function saveOwnerNoteToLatestReport(dataset, data) {
   if (currentRole !== "Owner" || !DIVISION_DATASETS.includes(dataset)) throw new Error("Akses Catatan Owner tidak diizinkan.");
   if (!state[dataset]?.length) throw new Error("Belum ada laporan divisi yang dapat diberi Catatan Owner.");
   const row = state[dataset][0];
-  const previousRow = { ...row };
-  ensureRecordIdentity(previousRow, dataset);
-  row.ownerNote = ownerNoteValue(data.ownerNote);
   ensureRecordIdentity(row, dataset);
+  const previousRow = { ...row };
+  row.ownerNote = ownerNoteValue(data.ownerNote);
   enqueueSyncMutation(dataset, "update", row, previousRow);
   saveState();
   renderAll();
@@ -4630,6 +4629,7 @@ async function flushMutationQueueOwned(options = {}) {
   syncInProgress = true;
 
   const queue = getOwnedMutationQueue();
+  const syncSessionGeneration = datasetSessionGeneration;
   const now = Date.now();
   const ready = queue.filter(item => Number(item.nextAttemptAt || 0) <= now).slice(0, SYNC_BATCH_SIZE);
   if (!ready.length) {
@@ -4661,13 +4661,16 @@ async function flushMutationQueueOwned(options = {}) {
       })
     }, 45000);
     const result = await response.json();
+    if (syncSessionGeneration !== datasetSessionGeneration || !state.session.authenticated) return false;
     if (!result.ok) throw new Error(result.error || "Sync mutation gagal.");
     const resultById = new Map((result.results || []).map(item => [item.operationId, item]));
-    const acceptedIds = new Set(result.acceptedIds || []);
-    const permanentIds = new Set(result.permanentIds || []);
-    const retryableIds = new Set(result.retryableIds || []);
-    if (!result.results && !result.acceptedIds) ready.forEach(item => acceptedIds.add(item.id));
+    const sentIds = new Set(ready.map(item => item.id));
+    const acceptedIds = new Set((result.acceptedIds || []).filter(id => sentIds.has(id)));
+    const permanentIds = new Set((result.permanentIds || []).filter(id => sentIds.has(id)));
+    const retryableIds = new Set((result.retryableIds || []).filter(id => sentIds.has(id)));
+    // No explicit ACK means the operation remains queued for a safe retry.
     (result.results || []).forEach(item => {
+      if (!sentIds.has(item.operationId)) return;
       if (["APPLIED", "ALREADY_APPLIED"].includes(item.status)) acceptedIds.add(item.operationId);
       else if (["PERMANENT_ERROR", "FORBIDDEN"].includes(item.status)) permanentIds.add(item.operationId);
       else if (item.status === "RETRYABLE_ERROR") retryableIds.add(item.operationId);
@@ -4696,17 +4699,18 @@ async function flushMutationQueueOwned(options = {}) {
       phase: deadLetters.length ? "error" : (ownedRemaining.length ? "queued" : "synced"),
       pending: ownedRemaining.length > 0,
       queueLength: ownedRemaining.length,
-      lastSuccessAt: new Date().toISOString(),
+      ...(acceptedIds.size ? { lastSuccessAt: new Date().toISOString() } : {}),
       lastError: deadLetters.length ? `${deadLetters.length} perubahan perlu tindakan.` : "",
       retryCount: retryableIds.size,
       nextRetryAt: retryableIds.size ? retryAt : 0,
       lastBatchSize: ready.length
     });
     if (ownedRemaining.length) scheduleAutoSync(retryableIds.size ? retryAt - Date.now() : 800 + Math.floor(Math.random() * 1200));
-    if (!options.silent) toast(deadLetters.length ? "Sebagian data perlu diperbaiki. Data valid sudah tersinkron." : "Data berhasil tersinkron ke server.");
+    if (!options.silent) toast(deadLetters.length ? "Sebagian perubahan perlu ditinjau. Data tersimpan dalam daftar gagal." : (ownedRemaining.length ? "Sebagian perubahan masih menunggu konfirmasi server." : "Data berhasil tersinkron ke server."));
     return true;
   } catch (error) {
     const failedIds = new Set(ready.map(item => item.id));
+    if (syncSessionGeneration !== datasetSessionGeneration || !state.session.authenticated) return false;
     const retryAt = Date.now() + retryDelayFor(ready);
     const updatedQueue = getMutationQueue().map(item => failedIds.has(item.id)
       ? { ...item, attempt: Number(item.attempt || 0) + 1, nextAttemptAt: retryAt, lastError: error.message }
@@ -4880,12 +4884,14 @@ async function fetchFromGoogleSheets(options = {}) {
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
     if (sessionGeneration !== datasetSessionGeneration || !state.session.authenticated) return null;
 
+    const pendingDatasets = new Set(getOwnedMutationQueue().map(item => item.dataset));
+    const fetchedData = Object.fromEntries(Object.entries(result.data || {}).filter(([dataset]) => !pendingDatasets.has(dataset)));
     state = {
       ...state,
-      ...result.data,
+      ...fetchedData,
       session: state.session
     };
-    markDatasetsLoaded(requestedDatasets.filter(dataset => Object.prototype.hasOwnProperty.call(result.data || {}, dataset)));
+    markDatasetsLoaded(requestedDatasets.filter(dataset => Object.prototype.hasOwnProperty.call(fetchedData, dataset)));
     normalizeDashboardState(state);
     mergeFetchedColumnMetadata(result);
     delete state.settings.backendUrl;
@@ -4896,7 +4902,7 @@ async function fetchFromGoogleSheets(options = {}) {
     autoSyncPaused = false;
     const totalFetchMs = Math.round(performance.now() - fetchStartedAt);
     setSyncStatus({
-      pending: false,
+      pending: getOwnedMutationQueue().length > 0,
       lastFetchAt: new Date().toISOString(),
       lastFetchMs: totalFetchMs,
       lastFetchDatasets: requestedDatasets,
@@ -4911,7 +4917,7 @@ async function fetchFromGoogleSheets(options = {}) {
     });
     renderAll();
     if (!options.silent) toast("Data berhasil diambil dari Google Sheets.");
-    return result.data;
+    return fetchedData;
   } catch (error) {
     autoSyncPaused = false;
     if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
