@@ -4716,7 +4716,7 @@ async function flushMutationQueueOwned(options = {}) {
     setSyncStatus({
       phase: "queued",
       pending: true,
-      queueLength: updatedQueue.length,
+      queueLength: getOwnedMutationQueue(updatedQueue).length,
       lastError: error.message,
       lastFailedAt: new Date().toISOString(),
       retryCount: Math.max(...ready.map(item => Number(item.attempt || 0) + 1)),
