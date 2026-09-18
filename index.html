@@ -874,6 +874,7 @@ let searchRenderTimer = null;
 let loginInProgress = false;
 let secureFetchInProgress = false;
 let datasetSessionGeneration = 0;
+let backendWarmupPromise = null;
 const TAB_SYNC_INSTANCE_ID = `afk-tab-${randomId()}`;
 const pendingSecureFetchDatasets = new Set();
 const datasetLoadState = new Map();
@@ -1737,15 +1738,19 @@ async function validateBackendSessionOnStart() {
   const session = loadBackendAuthSession();
   if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url || !session?.sessionToken) return false;
   try {
-    const response = await fetchWithTimeout(backend.url, {
+    const result = await requestBackendJson(backend.url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "validateSession",
         sessionToken: session.sessionToken
       })
-    }, 30000);
-    const result = await response.json();
+    }, {
+      context: "Validasi sesi",
+      timeoutMs: 45000,
+      retries: 1,
+      retryPolicy: "read-only"
+    });
     if (!result.ok || !result.success || !result.user) throw new Error(result.error || "Session tidak valid.");
     const role = normalizeRoleName(result.user.role);
     currentRole = role;
@@ -2066,6 +2071,7 @@ function openLogin(role) {
   setLoginLoading(false);
   els.cancelLogin.style.display = loginRequired ? "none" : "";
   els.loginModal.showModal();
+  warmBackendConnection();
   setTimeout(() => els.loginRoleSelect.focus(), 50);
 }
 
@@ -2073,7 +2079,7 @@ async function loginWithBackendAuth(account, password) {
   const backend = getBackendConfig();
   if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url) return null;
   const startedAt = performance.now();
-  const response = await fetchWithTimeout(backend.url, {
+  const result = await requestBackendJson(backend.url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({
@@ -2081,9 +2087,13 @@ async function loginWithBackendAuth(account, password) {
       username: account.username,
       password
     })
-  }, 30000);
+  }, {
+    context: "Login",
+    timeoutMs: 45000,
+    retries: 1,
+    retryPolicy: "server-only"
+  });
   const responseAt = performance.now();
-  const result = await response.json();
   result.frontendTiming = {
     loginResponseMs: Math.round(responseAt - startedAt),
     loginParseMs: Math.round(performance.now() - responseAt),
@@ -2099,15 +2109,19 @@ async function logoutFromBackendAuth() {
   const backend = getBackendConfig();
   const sessionToken = getBackendSessionToken();
   if (!CONFIG.BACKEND_AUTH_ENABLED || !backend.url || !sessionToken) return;
-  const response = await fetchWithTimeout(backend.url, {
+  const result = await requestBackendJson(backend.url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({
       action: "logout",
       sessionToken
     })
-  }, 30000);
-  const result = await response.json();
+  }, {
+    context: "Logout",
+    timeoutMs: 30000,
+    retries: 0,
+    retryPolicy: "server-only"
+  });
   if (!result.ok || !result.success) throw new Error(result.error || "Logout backend gagal.");
 }
 
@@ -4696,7 +4710,77 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { ...options, signal: controller.signal })
+    .catch(error => {
+      if (controller.signal.aborted || error?.name === "AbortError") {
+        const timeoutError = new Error(`Server belum merespons setelah ${Math.round(timeoutMs / 1000)} detik. Silakan coba lagi.`);
+        timeoutError.code = "BACKEND_TIMEOUT";
+        throw timeoutError;
+      }
+      const networkError = new Error("Koneksi ke backend terputus. Periksa internet lalu coba lagi.");
+      networkError.code = "BACKEND_NETWORK";
+      networkError.cause = error;
+      throw networkError;
+    })
     .finally(() => clearTimeout(timer));
+}
+
+async function parseBackendJson(response, context = "Backend") {
+  const text = (await response.text()).replace(/^\uFEFF/, "");
+  let result;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    const error = new Error(`${context} menerima respons sementara dari Google. Silakan coba lagi.`);
+    error.code = "BACKEND_NON_JSON";
+    error.status = response.status;
+    error.retryable = true;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(result?.error || `${context} gagal (HTTP ${response.status}).`);
+    error.code = "BACKEND_HTTP";
+    error.status = response.status;
+    error.retryable = [429, 502, 503, 504].includes(response.status);
+    throw error;
+  }
+  return result;
+}
+
+function shouldRetryBackendRequest(error, policy = "read-only") {
+  if (policy === "server-only") return error?.code === "BACKEND_NON_JSON" || error?.retryable === true;
+  return ["BACKEND_NON_JSON", "BACKEND_TIMEOUT", "BACKEND_NETWORK"].includes(error?.code) || error?.retryable === true;
+}
+
+async function requestBackendJson(url, options = {}, requestOptions = {}) {
+  const retries = Math.max(0, Number(requestOptions.retries) || 0);
+  const timeoutMs = Number(requestOptions.timeoutMs) || 45000;
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+      return await parseBackendJson(response, requestOptions.context || "Backend");
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries || !shouldRetryBackendRequest(error, requestOptions.retryPolicy)) break;
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.floor(Math.random() * 700)));
+    }
+  }
+  throw lastError;
+}
+
+function warmBackendConnection() {
+  const backend = getBackendConfig();
+  if (!backend.url || backendWarmupPromise) return backendWarmupPromise;
+  const url = new URL(backend.url);
+  url.searchParams.set("action", "health");
+  url.searchParams.set("_", Date.now().toString());
+  backendWarmupPromise = requestBackendJson(url.toString(), { cache: "no-store" }, {
+    context: "Warm-up backend",
+    timeoutMs: 20000,
+    retries: 0,
+    retryPolicy: "read-only"
+  }).catch(() => null).finally(() => { backendWarmupPromise = null; });
+  return backendWarmupPromise;
 }
 
 async function fetchFromGoogleSheets(options = {}) {
@@ -4731,8 +4815,12 @@ async function fetchFromGoogleSheets(options = {}) {
     if (options.includeSettings) url.searchParams.set("includeSettings", "true");
     url.searchParams.set("_", Date.now().toString());
 
-    const response = await fetch(url.toString(), { cache: "no-store" });
-    const result = await response.json();
+    const result = await requestBackendJson(url.toString(), { cache: "no-store" }, {
+      context: "Memuat data",
+      timeoutMs: 60000,
+      retries: 1,
+      retryPolicy: "read-only"
+    });
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
     if (sessionGeneration !== datasetSessionGeneration || !state.session.authenticated) return null;
 
