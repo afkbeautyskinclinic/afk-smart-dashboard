@@ -824,6 +824,8 @@ const SYNC_BATCH_SIZE = 20;
 const SYNC_BASE_RETRY_MS = 3500;
 const SYNC_MAX_RETRY_MS = 120000;
 const SYNC_LOCK_TTL_MS = 55000;
+const MAX_UPLOAD_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_UPLOAD_FILE_LABEL = "2 MB";
 const APP_CACHE_PREFIX = "afk-dashboard-";
 const DEFAULT_DASHBOARD_NAME = "AFK Growth Intelligence Dashboard";
 const LEGACY_DASHBOARD_NAMES = new Set(["AFK Beauty Clinic Smart Dashboard", "AFK Beauty Smart Dashboard", "AFK Beauty  Smart Dashboard"]);
@@ -2842,7 +2844,7 @@ function crmForm() {
     select("gender", "Jenis Kelamin", ["Perempuan", "Laki-laki"]),
     input("address", "Alamat"),
     input("wa", "No WhatsApp"),
-    select("interest", "Treatment Interest", splitSetting("treatments")),
+    input("interest", "Treatment Interest"),
     input("productInterest", "Product Interest"),
     select("status", "Status Lead", ["Iklan", "Data Base", "Walk In", "Referral"]),
     select("category", "Kategori Lead", ["Hot", "Warm", "Cold"]),
@@ -3039,7 +3041,7 @@ function doctorForm() {
     input("dailyExpense", "Pengeluaran/Obat Terpakai", "number"),
     input("patientName", "Nama Lengkap Pasien"),
     input("bookingId", "Booking ID"),
-    select("treatmentName", "Jenis Treatment", splitSetting("treatments")),
+    input("treatmentName", "Jenis Treatment"),
     input("nurseAssistant", "Suster Yang Membantu"),
     textarea("productsTools", "Produk/Alat Yang Digunakan"),
     textarea("medicineGiven", "Obat Yang Diberikan"),
@@ -3094,7 +3096,7 @@ function medisForm() {
     input("dailyExpense", "Pengeluaran Produk/Alat", "number"),
     input("patientId", "Nama Pasien"),
     input("bookingId", "Booking ID"),
-    select("treatmentName", "Treatment", splitSetting("treatments")),
+    input("treatmentName", "Treatment"),
     input("doctor", "Dokter"),
     input("nurseBeautician", "Suster/Beautician"),
     input("room", "Ruangan"),
@@ -3145,6 +3147,7 @@ async function uploadTreatmentMedia(files, meta, section = "medis") {
   if (!backend.url) throw new Error("Isi Google Apps Script Web App URL di Settings untuk upload media.");
   const sessionToken = getBackendSessionToken();
   if (CONFIG.BACKEND_AUTH_REQUIRED && !sessionToken) throw new Error("Login backend diperlukan sebelum upload media.");
+  validateUploadFiles(files);
   const payloadFiles = await Promise.all(files.map(fileToPayload));
   const response = await fetch(backend.url, {
     method: "POST",
@@ -3668,9 +3671,17 @@ function formValues(form) {
 function formFiles(form) {
   return [...form.querySelectorAll('input[type="file"]')].reduce((fields, inputEl) => {
     const files = [...(inputEl.files || [])].filter(file => file.size);
+    validateUploadFiles(files);
     if (files.length) fields[inputEl.name] = files;
     return fields;
   }, {});
+}
+
+function validateUploadFiles(files) {
+  const oversized = [...(files || [])].find(file => Number(file?.size || 0) > MAX_UPLOAD_FILE_BYTES);
+  if (oversized) {
+    throw new Error(`File "${oversized.name}" melebihi batas ${MAX_UPLOAD_FILE_LABEL} per file. Pilih foto/video yang lebih kecil.`);
+  }
 }
 
 function bindExports() {
@@ -3973,7 +3984,7 @@ function input(name, text, type = "text", value = "") {
   return `<label>${text}<input name="${name}" type="${type}" value="${escapeHtml(value)}" ${type === "date" ? "" : ""}></label>`;
 }
 function fileInput(name, text, accept = "", multiple = false) {
-  return `<label>${text}<input name="${name}" type="file" accept="${escapeHtml(accept)}" ${multiple ? "multiple" : ""}></label>`;
+  return `<label>${text}<input name="${name}" type="file" accept="${escapeHtml(accept)}" ${multiple ? "multiple" : ""}><small>Maksimal ${MAX_UPLOAD_FILE_LABEL} per file.</small></label>`;
 }
 function textarea(name, text, value = "") {
   return `<label>${text}<textarea name="${name}">${escapeHtml(value)}</textarea></label>`;
