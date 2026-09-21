@@ -1813,18 +1813,18 @@ function normalizeDashboardState(targetState) {
   targetState.settings = {
     ...defaultState().settings,
     ...(targetState.settings || {}),
-    brandName: LEGACY_DASHBOARD_NAMES.has(targetState.settings?.brandName) || !targetState.settings?.brandName ? DEFAULT_DASHBOARD_NAME : targetState.settings.brandName,
-    primaryColor: !targetState.settings?.primaryColor || targetState.settings.primaryColor.toLowerCase() === "#f81894" ? DEFAULT_PRIMARY_COLOR : targetState.settings.primaryColor,
-    clinicName: targetState.settings?.clinicName || "AFK Beauty Skin Clinic",
-    clinicDescription: targetState.settings?.clinicDescription || "Pusat kontrol operasional dan laporan realtime AFK Beauty Skin Clinic.",
-    pics: targetState.settings?.pics || DEFAULT_PIC_LIST,
-    treatments: targetState.settings?.treatments || DEFAULT_TREATMENT_LIST,
-    sources: targetState.settings?.sources || DEFAULT_SOURCE_LIST
+    brandName: targetState.settings?.brandName ?? DEFAULT_DASHBOARD_NAME,
+    primaryColor: targetState.settings?.primaryColor || DEFAULT_PRIMARY_COLOR,
+    clinicName: targetState.settings?.clinicName ?? "AFK Beauty Skin Clinic",
+    clinicDescription: targetState.settings?.clinicDescription ?? "Pusat kontrol operasional dan laporan realtime AFK Beauty Skin Clinic.",
+    pics: targetState.settings?.pics ?? DEFAULT_PIC_LIST,
+    treatments: targetState.settings?.treatments ?? DEFAULT_TREATMENT_LIST,
+    sources: targetState.settings?.sources ?? DEFAULT_SOURCE_LIST
   };
   targetState.settings.userAccounts = normalizeUserAccounts(targetState.settings.userAccounts);
   delete targetState.settings.backendUrl;
   delete targetState.settings.backendToken;
-  migrateTreatmentNames(targetState);
+  // Treatment names are user data; loading settings must not rewrite reports.
   migrateMarketingRows(targetState);
   migrateCrmRows(targetState);
   migrateDivisionRows(targetState);
@@ -3421,6 +3421,7 @@ function renderSettings() {
     const submitButton = event.currentTarget.querySelector(".primary-button");
     if (submitButton) submitButton.disabled = true;
     const formData = new FormData(event.currentTarget);
+      const previousSettings = settingsForSync();
     const existingAccounts = getUserAccounts();
     const authChanges = [];
     const updatedAccounts = existingAccounts.map((account, index) => {
@@ -3472,11 +3473,11 @@ function renderSettings() {
       normalizeDashboardState(state);
       refreshLoginRoleOptions();
       if (!canAccessPage(activePage)) activePage = resolveInitialActivePage();
-      enqueueSyncMutation("settings", "settingsUpdate", settingsForSync());
+      enqueueSyncMutation("settings", "settingsUpdate", settingsForSync(), previousSettings);
       saveState();
       buildNavigation();
       renderAll();
-      toast("Settings dan akun pengguna berhasil disimpan.");
+      toast("Settings tersimpan di perangkat dan menunggu konfirmasi server.");
     } catch (error) {
       toast(error.message || "Settings gagal disimpan.");
     } finally {
