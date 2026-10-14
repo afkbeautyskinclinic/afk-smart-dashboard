@@ -2053,7 +2053,7 @@ function registerServiceWorker() {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./service-worker.js")
-      .then(() => toast("Aplikasi siap dipakai offline setelah install."))
+      .then(() => toast("Aplikasi siap. Login dan data memerlukan koneksi internet."))
       .catch(() => toast("Service worker belum aktif. Coba buka lewat localhost/HTTPS."));
   });
 }
@@ -5139,9 +5139,14 @@ function label(key, dataset = "") {
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, x => x.toUpperCase());
 }
 function mediaLinks(value) {
-  const links = String(value || "").split(/\n|,\s*/).map(x => x.trim()).filter(Boolean);
+  const links = String(value || "").split(/\n|,\s*/).map(x => x.trim()).filter(url => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+    } catch { return false; }
+  });
   if (!links.length) return "-";
-  return links.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Media ${index + 1}</a>`).join("<br>");
+  return links.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Media ${index + 1}</a>`).join("<br>");
 }
 function badgeClass(value) { return String(value).toLowerCase().replace(/\s+/g, "-"); }
 function sectionLabel(section) {
