@@ -868,6 +868,7 @@ let charts = {};
 let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
 let autoSyncTimer = null;
+let serverPollTimer = null;
 let autoSyncPaused = false;
 let syncInProgress = false;
 let syncChannel = null;
@@ -1616,9 +1617,21 @@ function isReloadNavigation() {
 }
 
 function initAutoSync() {
+  clearInterval(serverPollTimer);
+  serverPollTimer = setInterval(pollActiveDashboard, 30000 + Math.floor(Math.random() * 15000));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") pollActiveDashboard();
+  });
   window.addEventListener("online", () => scheduleAutoSync(800 + Math.floor(Math.random() * 4000)));
   clearTimeout(autoSyncTimer);
   if (getOwnedMutationQueue().length) scheduleAutoSync(800 + Math.floor(Math.random() * 2400));
+}
+
+function pollActiveDashboard() {
+  if (!state.session.authenticated || document.visibilityState !== "visible" || !navigator.onLine ||
+      syncInProgress || secureFetchInProgress || getOwnedMutationQueue().length) return;
+  const datasets = activePage === "owner" ? DATASET_KEYS.filter(canViewDataset) : datasetsForPage(activePage);
+  return startBackgroundDataLoad({ force: true, source: "poll", datasets });
 }
 
 function datasetsForPage(pageId = activePage) {
@@ -4263,6 +4276,10 @@ function exportPdf(dataset) {
 }
 
 function getExportSections(dataset) {
+  if (dataset === "owner" && currentRole !== "Owner") {
+    toast("Hanya Owner yang dapat mengekspor ringkasan Owner.");
+    return [];
+  }
   if (dataset !== "owner" && dataset !== "all" && !canViewDataset(dataset)) {
     toast("Role ini tidak punya akses export data tersebut.");
     return [];
@@ -4563,7 +4580,10 @@ function formatExportValue(key, value) {
 }
 
 function csvCell(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+  let text = String(value ?? "");
+  // Quoting alone does not stop spreadsheet software from evaluating formulas.
+  if (typeof value === "string" && /^[\s\uFEFF]*[=+@-]/u.test(text)) text = "'" + text;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 async function syncToGoogleSheets(options = {}) {
@@ -4878,16 +4898,21 @@ async function fetchFromGoogleSheets(options = {}) {
   const fetchStartedAt = performance.now();
   const sessionGeneration = Number.isFinite(options.sessionGeneration) ? options.sessionGeneration : datasetSessionGeneration;
   try {
-    const url = new URL(backend.url);
-    url.searchParams.set("action", sessionToken ? "secureFetch" : "fetch");
-    if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) url.searchParams.set("token", backend.token);
-    if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
     const requestedDatasets = [...new Set((options.datasets || []).filter(dataset => DATASET_KEYS.includes(dataset)))];
-    if (requestedDatasets.length) url.searchParams.set("datasets", requestedDatasets.join(","));
-    if (options.includeSettings) url.searchParams.set("includeSettings", "true");
-    url.searchParams.set("_", Date.now().toString());
-
-    const result = await requestBackendJson(url.toString(), { cache: "no-store" }, {
+    const payload = {
+      action: sessionToken ? "secureFetch" : "fetch",
+      sessionToken,
+      datasets: requestedDatasets,
+      includeSettings: options.includeSettings ? "true" : "false"
+    };
+    if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) payload.token = backend.token;
+    // Keep session credentials out of URLs, browser history and cache keys.
+    const result = await requestBackendJson(backend.url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }, {
       context: "Memuat data",
       timeoutMs: 60000,
       retries: 1,
@@ -4932,6 +4957,12 @@ async function fetchFromGoogleSheets(options = {}) {
     return fetchedData;
   } catch (error) {
     autoSyncPaused = false;
+    if (/^AUTH_(REQUIRED|INVALID|REVOKED|EXPIRED)$/.test(String(error.message || "")) &&
+        sessionGeneration === datasetSessionGeneration && getBackendSessionToken() === sessionToken) {
+      await handleLogout();
+      toast("Sesi tidak lagi valid. Silakan login kembali.");
+      return null;
+    }
     if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
   }

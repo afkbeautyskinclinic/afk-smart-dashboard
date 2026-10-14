@@ -56,3 +56,34 @@ project with the full candidate backend modules and a blank property store.
 It refuses an existing database ID on first setup and verifies the staging ID/name
 on subsequent runs. It creates synthetic accounts, reports, sessions and audit
 records. Do not install it in production.
+
+## Restricted Web App and browser RPC tests — follow-up
+
+A separate staging Web App version 1 was deployed on 14 October 2026 with
+access **Only myself**, executing as the account owner. A browser successfully
+loaded its synthetic test page and completed 12 RPC mutation calls (6 distinct
+operation/row IDs submitted twice). All replies were APPLIED or ALREADY_APPLIED,
+and the final read contained exactly 6 distinct rows. Seven conflict checks passed:
+baseline creation, first edit, stale same-field rejection, winning value preserved,
+stale different-field merge, both fields retained, and missing update rejected.
+Observed synthetic backend login: 2318 ms (lookup 393 ms, password verification
+714 ms, session creation 804 ms). Total browser suite: 80389 ms, including login,
+mutation requests, verification reads and the sequential conflict suite. This is
+not a per-request or large-load benchmark; it does not certify hundreds of users.
+
+The test page uses google.script.run RPC inside Google’s authenticated Web App.
+It verifies real concurrent execution/locking and backend outcomes, but not the
+cross-origin fetch transport from GitHub Pages. The staging endpoint remains
+restricted to the owner. The production endpoint and production data are unchanged.
+
+The frontend candidate now also:
+- polls while visible, authenticated and online at a per-tab interval of 30–45 s;
+  pauses while writes are pending or fetch/sync is busy;
+- refreshes all Owner source datasets and only the active page datasets for staff;
+- sends secureFetch credentials in the POST body, not URL query parameters;
+- returns a revoked/expired current session to login;
+- neutralizes CSV formula text and limits Owner exports to the Owner role.
+
+21 local regression tests pass for the expanded frontend/backend candidate.
+The actual GitHub Pages-to-staging endpoint transport, every division’s form,
+CSV/PDF downloads, realistic multi-user load and media storage remain pending.

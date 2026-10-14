@@ -107,3 +107,38 @@ test('frontend inline script remains syntactically valid', () => {
   for (const script of scripts) new vm.Script(script[1]);
   assert.ok(scripts.length);
 });
+const csvSource = html.slice(html.indexOf('function csvCell(value)'), html.indexOf('async function syncToGoogleSheets'));
+const csvContext = {}; vm.runInNewContext(csvSource, csvContext);
+test('CSV neutralizes formula text, including whitespace prefixes, and keeps numeric values', () => {
+  for (const value of ['=SUM(1,2)', '+CMD', '-CMD', '@SUM(1)', '\t=SUM(1)', '\r\n=SUM(1)']) {
+    assert.ok(csvContext.csvCell(value).startsWith('"\''));
+  }
+  assert.equal(csvContext.csvCell(-42), '"-42"');
+  assert.equal(csvContext.csvCell('ordinary text'), '"ordinary text"');
+  assert.equal(csvContext.csvCell('a"b'), '"a""b"');
+});
+const exportSource = html.slice(html.indexOf('function getExportSections(dataset)'), html.indexOf('function getIntegratedOwnerMetrics'));
+test('Owner export refuses non-Owner roles even if called directly', () => {
+  const ctx = { currentRole: 'CRM', toast: () => {}, getOwnerExportSections: () => {throw new Error('must not export');} };
+  vm.runInNewContext(exportSource,ctx);
+  assert.equal(ctx.getExportSections('owner').length,0);
+});
+const pollingSource=html.slice(html.indexOf('function pollActiveDashboard()'),html.indexOf('function datasetsForPage'));
+test('polling refreshes visible authenticated pages and pauses for pending writes/offline/busy state',()=>{
+ const calls=[];
+ const ctx={state:{session:{authenticated:true}},document:{visibilityState:'visible'},navigator:{onLine:true},syncInProgress:false,secureFetchInProgress:false,getOwnedMutationQueue:()=>[],activePage:'crm',datasetsForPage:()=>['crm'],startBackgroundDataLoad:x=>calls.push(x)};
+ vm.runInNewContext(pollingSource,ctx);ctx.pollActiveDashboard();assert.equal(calls.length,1);assert.equal(calls[0].force,true);
+ for(const field of ['hidden','offline','busy','queue','logged-out']){
+  ctx.document.visibilityState=field==='hidden'?'hidden':'visible';ctx.navigator.onLine=field!=='offline';ctx.syncInProgress=field==='busy';ctx.getOwnedMutationQueue=()=>field==='queue'?[{}]:[];ctx.state.session.authenticated=field!=='logged-out';
+  ctx.pollActiveDashboard();assert.equal(calls.length,1);
+ }
+});
+const fetchSource=html.slice(html.indexOf('async function fetchFromGoogleSheets(options = {})'),html.indexOf('function getBackendConfig()'));
+test('secure fetch sends session in POST body, never in URL; auth revocation clears current session',async()=>{
+ let captured,logout=0;
+ const ctx={URL,performance:{now:()=>0},getBackendConfig:()=>({url:'https://script.google.com/macros/s/staging/exec'}),getBackendSessionToken:()=> 'synthetic-session',CONFIG:{BACKEND_AUTH_REQUIRED:true},getOwnedMutationQueue:()=>[],datasetSessionGeneration:1,DATASET_KEYS:['crm'],state:{session:{authenticated:true}},requestBackendJson:async(url,options)=>{captured={url,options};return {ok:false,error:'AUTH_REVOKED'};},handleLogout:async()=>logout++,toast:()=>{}};
+ vm.runInNewContext(fetchSource,ctx);
+ await ctx.fetchFromGoogleSheets({silent:true,datasets:['crm'],includeSettings:true});
+ assert.equal(captured.url,'https://script.google.com/macros/s/staging/exec');assert.equal(captured.options.method,'POST');
+ const payload=JSON.parse(captured.options.body);assert.equal(payload.sessionToken,'synthetic-session');assert.deepEqual(payload.datasets,['crm']);assert.equal(logout,1);
+});

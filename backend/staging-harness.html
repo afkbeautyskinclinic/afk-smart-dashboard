@@ -1,0 +1,15 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AFK Staging Verification</title><style>body{font:16px system-ui;background:#fff5fa;color:#24172a;margin:0;padding:32px}main{max-width:850px;margin:auto;background:white;padding:28px;border-radius:20px;border:1px solid #f1cddd}h1{font-size:26px}button{background:#b71866;border:0;color:white;border-radius:10px;padding:12px 20px;font:inherit;cursor:pointer}button:disabled{opacity:.5}pre{background:#f6f3f5;padding:18px;white-space:pre-wrap;overflow-wrap:anywhere}small{color:#6e5463}</style></head><body><main><h1>AFK — Pengujian Web App Staging</h1><p>Database sintetis. Akses hanya pemilik akun. Tidak terhubung ke data produksi.</p><button id="run">Jalankan pengujian browser</button><pre id="log">Siap. Pengujian: 12 permintaan, 6 ID unik, konflik kolom, dan sesi logout.</pre><small>Transport pengujian: Google Apps Script RPC. Pengujian ini belum mengukur CORS frontend GitHub Pages atau beban ribuan pengguna.</small></main><script>
+const button=document.getElementById('run'),log=document.getElementById('log');
+function rpc(name,...args){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args));}
+button.onclick=async()=>{button.disabled=true;log.textContent='Pengujian berjalan...';const started=performance.now();try{
+ const auth=await rpc('afkStageBrowserStart');
+ log.textContent='Login sintetis berhasil. Mengirim permintaan bersamaan...';
+ const replies=await Promise.all(Array.from({length:12},(_,n)=>rpc('afkStageBrowserMutation',auth.sessionToken,auth.runId,n%6)));
+ const status=replies.map(r=>r.results?.[0]?.status);
+ if(status.some(s=>!['APPLIED','ALREADY_APPLIED'].includes(s)))throw new Error('Mutation failed: '+JSON.stringify(status));
+ const summary=await rpc('afkStageBrowserFinish',auth.sessionToken,auth.runId);
+ const conflict=await rpc('afkStageConflictRun');
+ const result={ok:true,requests:12,uniqueIds:6,rows:summary.rows,distinctRows:summary.distinctRows,statuses:status,loginTiming:auth.timing,conflictChecks:conflict,elapsedMs:Math.round(performance.now()-started)};
+ log.textContent=JSON.stringify(result,null,2);document.title='PASS — AFK Staging Verification';
+ }catch(e){log.textContent='FAIL: '+(e.message||e);document.title='FAIL — AFK Staging Verification';}finally{button.disabled=false;}};
+</script></body></html>
