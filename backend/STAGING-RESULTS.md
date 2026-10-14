@@ -203,3 +203,41 @@ administration, protection against account/menu replacement through settings, an
 frontend refusal before an unauthorized account request. The expanded patch applies
 cleanly to the captured source. Staging runtime verification remains pending at
 this entry. No production data or deployment has changed.
+
+## Nine-role operations and account boundary — staging version 6
+
+On 14 October 2026, the synthetic Apps Script operational suite completed
+72 checks across all nine application roles. Each role passed login/identity,
+create, idempotent retry, exact readback, update, updated readback, rejection of
+an unauthorized dataset write despite a forged Owner actorRole, and logout
+revocation. These checks exercised the backend router and real synthetic Sheets;
+they do not constitute browser-form or HTTP end-to-end verification.
+
+At 13:58 Asia/Jakarta, all seven account-boundary checks passed: Inventory login,
+account administration denial, permitted operational settings write, persisted
+operational setting, unchanged account/menu settings, retained Owner login, and
+Owner reaching account payload validation. The first test attempt omitted the
+settings previousRow snapshot and correctly encountered conflict protection.
+Supplying that snapshot corrected the test fixture; no application change was
+required. No passwords or actual authentication accounts were changed by this
+boundary test.
+
+The existing synthetic staging deployment was updated successfully to version 6
+at 14:05 Asia/Jakarta with unchanged execution identity and access settings.
+The 31 Node regression tests also pass. Production Apps Script and main remain
+unchanged.
+
+### Remaining production release gates
+
+- Verify browser form submission/readback and attachment upload/access using
+  authenticated staging sessions. The current staging manifest has Sheets scope
+  only; real Drive media behavior has not been verified.
+- Confirm the production database binding and active deployment source, preserve
+  a recoverable data/source backup, and record the rollback deployment version.
+- Reconcile Owner totals with agreed source records; the synthetic backend checks
+  do not establish the business accounting rules or production totals.
+- Apply the reviewed backend replacements and frontend together only after these
+  gates pass; do not install the synthetic staging bundle into production.
+
+This is a tested staging candidate, not a completed production rollout or a
+capacity guarantee for concurrent clinic operations.
