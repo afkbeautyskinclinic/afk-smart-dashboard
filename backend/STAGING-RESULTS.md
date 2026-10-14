@@ -113,3 +113,34 @@ Observed earlier backend login was about 2.3 seconds; that measurement excludes
 full frontend rendering/network latency and is not a promise for the new version.
 Further profiling must separately measure password verification, session lookup,
 dataset reads, HTTP round trips and rendering after the updated staging deploy.
+
+## Owner loading optimization — deployed staging version 4
+
+On 14 October 2026 at approximately 12:52 Asia/Jakarta, the synthetic staging
+Web App was updated to version 4 on the existing deployment with unchanged
+Anyone access and owner execution. Production Apps Script and main were not
+modified. The full staging frontend now contains the single-tier Owner request,
+45-second fetch response timeout with no automatic retries, and failed-load labels.
+The backend reuses a spreadsheet handle within one execution and validates
+current session/account state without auth schema initialization.
+
+The 21-check synthetic backend security suite passed again (12:51:27–12:52:01).
+A subsequent three-sample function-level measurement completed at 12:53:45:
+
+| Sample | Login function, including audit | Fetch 11 Owner datasets | Password verification |
+| --- | ---: | ---: | ---: |
+| 1 | 2331 ms | 2549 ms | 1438 ms |
+| 2 | 2829 ms | 2327 ms | 1187 ms |
+| 3 | 2375 ms | 2733 ms | 1605 ms |
+
+These measurements use a small synthetic spreadsheet. They exclude HTTP redirects,
+network transfer, browser rendering, and real production data volume. They do not
+establish end-to-end latency or a before/after improvement ratio. Password hashing
+strength was not reduced. All 11 requested datasets were returned in each sample.
+
+Commit 5b4bef192df64b5d173be6e7fb88390fb67a9bdf passed the 24 Node regression
+tests locally and both GitHub Actions push/PR runs. The deployed login page loaded
+successfully in the browser. Full Owner browser verification remains pending:
+two secure browser-auth requests could not target the nested iframe password
+field, so manual login handoff is required. Do not treat the frontend loading
+issue as resolved until that verification succeeds.
