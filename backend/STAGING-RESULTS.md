@@ -164,3 +164,29 @@ creation when the combined request fails. Password hashing remains unchanged.
 28 local Node regression tests pass; the full backend patch applies cleanly to
 the captured source. Staging runtime and browser verification of this candidate
 are pending at this entry. Production remains unchanged.
+
+## Login initial-data runtime verification and staging version 5
+
+At 13:15:25–13:16:43 Asia/Jakarta on 14 October 2026, Apps Script executed
+the 21-check synthetic security suite successfully, then performed three Owner
+logins with initial-data responses and a staff exclusion check. Every Owner
+response contained all 11 expected datasets; stage_crm requesting the same flag
+received no Owner initial data. The test logged no passwords or session tokens.
+
+| Sample | Combined backend login and initial fetch | Datasets returned |
+| --- | ---: | ---: |
+| 1 | 5591 ms | 11 |
+| 2 | 7397 ms | 11 |
+| 3 | 7422 ms | 11 |
+
+These small synthetic measurements exclude HTTP/network and rendering. Backend
+variance means they do not prove an end-to-end speed improvement. The change
+removes one sequential HTTP round trip on a successful initial-data response;
+reading the spreadsheet and verifying the password still take time.
+
+The existing synthetic staging Web App was successfully updated to version 5
+at approximately 13:18 with unchanged permissions. Its login page is available
+for fresh browser testing. Commit 83c2897e39597ddbeda8010f11eb73c07bed13b3 passed
+both GitHub Actions runs with the 28 Node tests. Local Chrome end-to-end timing
+for version 5 remains pending. Production Apps Script and main are unchanged.
+
