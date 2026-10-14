@@ -142,3 +142,13 @@ test('secure fetch sends session in POST body, never in URL; auth revocation cle
  assert.equal(captured.url,'https://script.google.com/macros/s/staging/exec');assert.equal(captured.options.method,'POST');
  const payload=JSON.parse(captured.options.body);assert.equal(payload.sessionToken,'synthetic-session');assert.deepEqual(payload.datasets,['crm']);assert.equal(logout,1);
 });
+test('Owner initial load requests all source datasets in a single tier',()=>{
+ const declarations=html.slice(html.indexOf('const OWNER_TIER_1_DATASETS'),html.indexOf('const OWNER_MANAGED_DATASETS'));
+ const ctx={datasetsForPage:()=>[]};vm.runInNewContext(declarations+'\nthis.tiers=PAGE_PROGRESSIVE_TIERS.owner;',ctx);
+ assert.equal(ctx.tiers.length,1);assert.equal(new Set(ctx.tiers[0]).size,11);
+});
+test('Owner pending label distinguishes failed data loading from in-progress loading',()=>{
+ const src=html.slice(html.indexOf('function ownerPendingLabel()'),html.indexOf('function ownerLoadingSection'));
+ const ctx={datasetLoadState:new Map()};vm.runInNewContext(src,ctx);
+ assert.equal(ctx.ownerPendingLabel(),'Memuat...');ctx.datasetLoadState.set('crm',{error:'network'});assert.equal(ctx.ownerPendingLabel(),'Gagal memuat');
+});

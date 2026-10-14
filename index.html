@@ -885,7 +885,7 @@ const OWNER_TIER_1_DATASETS = ["manager", "marketing", "crm"];
 const OWNER_TIER_2_OPERATIONAL_DATASETS = ["content", "doctor", "medis", "inventory"];
 const OWNER_TIER_2_CONTROL_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const PAGE_PROGRESSIVE_TIERS = {
-  owner: [OWNER_TIER_1_DATASETS, OWNER_TIER_2_OPERATIONAL_DATASETS, OWNER_TIER_2_CONTROL_DATASETS],
+  owner: [[...OWNER_TIER_1_DATASETS, ...OWNER_TIER_2_OPERATIONAL_DATASETS, ...OWNER_TIER_2_CONTROL_DATASETS]],
   manager: [["manager"], ["inventory", "doctor", "medis", "ownerEscalation"]],
   managerMarketing: [["managerMarketingDaily", "marketing", "crm"], ["content", "patientCommand", "managerDecisionLog", "ownerEscalation"]],
   marketing: [["marketing"]],
@@ -2448,22 +2448,22 @@ function renderOwner() {
     ${renderOwnerControlTower(k, { tier1Ready, operationalReady, controlReady })}
     ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
-      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : "Memuat...")}
-      ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
-      ${kpi("Total Leads", tier1Ready ? k.totalLeads : "Memuat...")}
-      ${kpi("Qualified Leads", tier1Ready ? k.qualified : "Memuat...")}
-      ${kpi("Booking", tier1Ready ? k.booking : "Memuat...")}
-      ${kpi("Show-Up", tier1Ready ? k.showUp : "Memuat...")}
-      ${kpi("Treatment", operationalReady ? k.treatment : "Memuat...")}
-      ${kpi("Repeat", tier1Ready ? k.repeat : "Memuat...")}
-      ${kpi("Rebooking", operationalReady ? k.rebooking : "Memuat...")}
-      ${kpi("VIP", tier1Ready ? k.vip : "Memuat...")}
-      ${kpi("Referral", tier1Ready ? k.referral : "Memuat...")}
-      ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : "Memuat...")}
-      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : "Memuat...")}
-      ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : "Memuat...")}
-      ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : "Memuat...")}
-      ${kpi("Stock Critical", operationalReady ? k.stockCritical : "Memuat...")}
+      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : ownerPendingLabel())}
+      ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
+      ${kpi("Total Leads", tier1Ready ? k.totalLeads : ownerPendingLabel())}
+      ${kpi("Qualified Leads", tier1Ready ? k.qualified : ownerPendingLabel())}
+      ${kpi("Booking", tier1Ready ? k.booking : ownerPendingLabel())}
+      ${kpi("Show-Up", tier1Ready ? k.showUp : ownerPendingLabel())}
+      ${kpi("Treatment", operationalReady ? k.treatment : ownerPendingLabel())}
+      ${kpi("Repeat", tier1Ready ? k.repeat : ownerPendingLabel())}
+      ${kpi("Rebooking", operationalReady ? k.rebooking : ownerPendingLabel())}
+      ${kpi("VIP", tier1Ready ? k.vip : ownerPendingLabel())}
+      ${kpi("Referral", tier1Ready ? k.referral : ownerPendingLabel())}
+      ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : ownerPendingLabel())}
+      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : ownerPendingLabel())}
+      ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : ownerPendingLabel())}
+      ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : ownerPendingLabel())}
+      ${kpi("Stock Critical", operationalReady ? k.stockCritical : ownerPendingLabel())}
     </div>
     ${operationalReady ? renderIntegratedOwnerDashboard() : ownerLoadingSection("Integrated Owner Dashboard AFK", "Memuat rekonsiliasi operasional dan alert lintas divisi...")}<div class="two-col">
       ${chartCard("Funnel Klinik", "funnelChart")}
@@ -2486,24 +2486,28 @@ function renderOwnerControlTower(k, readiness = {}) {
   return `<section class="integrated-owner owner-control-tower">
     ${sectionHead("Owner Control Tower", "Ringkasan bisnis bertingkat dari operasional, manager, hingga Owner agar keputusan utama dapat dilihat dalam satu halaman.")}
     <div class="kpi-grid">
-      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : "Memuat...")}
-      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : "Memuat...")}
-      ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
-      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : "Memuat...")}
-      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : "Memuat...")}
-      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : "Memuat...")}
-      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : "Memuat...")}
-      ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : "Memuat...")}
-      ${kpi("Booking", readiness.tier1Ready ? k.booking : "Memuat...")}
-      ${kpi("Show Up", readiness.tier1Ready ? k.showUp : "Memuat...")}
-      ${kpi("Action Priority", readiness.controlReady ? problems.length : "Memuat...")}
-      ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : "Memuat...")}
+      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : ownerPendingLabel())}
+      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : ownerPendingLabel())}
+      ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
+      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : ownerPendingLabel())}
+      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : ownerPendingLabel())}
+      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : ownerPendingLabel())}
+      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : ownerPendingLabel())}
+      ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : ownerPendingLabel())}
+      ${kpi("Booking", readiness.tier1Ready ? k.booking : ownerPendingLabel())}
+      ${kpi("Show Up", readiness.tier1Ready ? k.showUp : ownerPendingLabel())}
+      ${kpi("Action Priority", readiness.controlReady ? problems.length : ownerPendingLabel())}
+      ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : ownerPendingLabel())}
     </div>
     <div class="two-col">
       ${ownerListCard("Lima Masalah Terbesar", problems, readiness.controlReady ? "Belum ada masalah prioritas yang perlu ditindaklanjuti." : "Memuat data kontrol manager...")}
       ${ownerListCard("Lima Keputusan Untuk Owner", decisions, readiness.controlReady ? "Belum ada keputusan yang menunggu perhatian Owner." : "Memuat keputusan dan eskalasi...")}
     </div>
   </section>`;
+}
+
+function ownerPendingLabel() {
+  return [...datasetLoadState.values()].some(item => item.error) ? "Gagal memuat" : "Memuat...";
 }
 
 function ownerLoadingSection(title, message) {
@@ -4914,8 +4918,8 @@ async function fetchFromGoogleSheets(options = {}) {
       body: JSON.stringify(payload)
     }, {
       context: "Memuat data",
-      timeoutMs: 60000,
-      retries: 1,
+      timeoutMs: 45000,
+      retries: 0,
       retryPolicy: "read-only"
     });
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
@@ -4962,6 +4966,14 @@ async function fetchFromGoogleSheets(options = {}) {
       await handleLogout();
       toast("Sesi tidak lagi valid. Silakan login kembali.");
       return null;
+    }
+    if (sessionGeneration === datasetSessionGeneration) {
+      (options.datasets || []).forEach(dataset => {
+        const previous = datasetLoadState.get(dataset) || {};
+        datasetLoadState.set(dataset, { ...previous, loading: false, error: error.message || "Pembacaan gagal." });
+      });
+      setSyncStatus({ lastError: error.message || "Pembacaan gagal.", lastFetchFailedAt: new Date().toISOString() });
+      renderAll();
     }
     if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;

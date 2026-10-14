@@ -10,7 +10,7 @@ function fixture() {
   const user = { userId:'user-1', username:'staff', role:'CRM', active:true };
   const ctx = {
     AFK_AUTH_SESSIONS_SHEET: '_sessions', AFK_AUTH_SESSION_HEADERS: [],
-    afkAuthSpreadsheet_: () => ({}), afkEnsureAuthSheets_: () => {},
+    getSpreadsheet_: () => ({ getSheetByName: () => ({}) }), afkAuthSpreadsheet_: () => ({}), afkEnsureAuthSheets_: () => {},
     afkGetOrCreateAuthSheet_: () => ({}), afkGetAuthHeaders_: () => [],
     afkDigestHex_: () => 'hash', afkFindAuthRowByValue_: () => 2,
     afkReadAuthRow_: () => session, afkBoolean_: x => x===true || x==='true',
@@ -91,4 +91,12 @@ test('fetch denies unauthorized datasets before reading', () => {
   const {ctx}=fixture(); ctx.afkCanAccessDataset_=()=>false;
   ctx.afkFetchAuthorizedDatasetsOptimized_=()=>{throw new Error('should not read');};
   assert.throws(()=>ctx.afkHandleSecureFetch_({}),/Akses dataset ditolak/);
+});
+test('session validation reads current state without schema initialization and reuses only the spreadsheet handle',()=>{
+ const {ctx}=fixture();let opens=0,users=0;
+ ctx.getSpreadsheet_=()=>{opens++;return {getSheetByName:()=>({})};};
+ ctx.afkEnsureAuthSheets_=()=>{throw new Error('must not initialize schema on read');};
+ ctx.afkFindAuthUserByUsername_=()=>{users++;return {userId:'user-1',username:'staff',role:'CRM',active:true};};
+ ctx.afkValidateSession_('synthetic');ctx.afkValidateSession_('synthetic');
+ assert.equal(opens,1);assert.equal(users,2);
 });

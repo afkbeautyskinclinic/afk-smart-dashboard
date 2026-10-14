@@ -80,7 +80,19 @@
  
  function afkRequestedDatasets_(request) {
    var raw = request && request.datasets;
-@@ -565,7 +583,7 @@
+@@ -553,8 +571,9 @@
+   if (!token) throw new Error("AUTH_REQUIRED");
+ 
+   var ss = afkAuthSpreadsheet_();
+-  afkEnsureAuthSheets_(ss);
+-  var sheet = afkGetOrCreateAuthSheet_(ss, AFK_AUTH_SESSIONS_SHEET, AFK_AUTH_SESSION_HEADERS);
++  // Read existing auth storage without creating sheets or rereading both schemas.
++  var sheet = ss.getSheetByName(AFK_AUTH_SESSIONS_SHEET);
++  if (!sheet) throw new Error("AUTH_INVALID");
+   var headers = afkGetAuthHeaders_(sheet);
+   var tokenHash = afkDigestHex_(token);
+   var rowIndex = afkFindAuthRowByValue_(sheet, headers, "sessionTokenHash", tokenHash);
+@@ -565,7 +584,7 @@
  
    var now = new Date();
    var expiresAt = new Date(session.expiresAt);
@@ -89,7 +101,7 @@
      afkUpdateAuthRow_(sheet, headers, rowIndex, { active: false, lastSeenAt: now.toISOString() });
      afkAuthAudit_("SESSION_EXPIRED", "Session expired.", {
        userId: session.userId,
-@@ -576,14 +594,23 @@
+@@ -576,14 +595,23 @@
      throw new Error("AUTH_EXPIRED");
    }
  
@@ -115,3 +127,21 @@
    };
  }
  
+@@ -950,9 +978,15 @@
+   return value > 0 ? value : 12;
+ }
+ 
++var AFK_AUTH_REQUEST_SPREADSHEET_ = null;
+ function afkAuthSpreadsheet_() {
+-  if (typeof getSpreadsheet_ === "function") return getSpreadsheet_();
+-  return SpreadsheetApp.getActiveSpreadsheet();
++  // In-memory handle reused only inside this Apps Script execution, not a
++  // shared authentication cache. Every request still rereads session/user state.
++  if (!AFK_AUTH_REQUEST_SPREADSHEET_) {
++    AFK_AUTH_REQUEST_SPREADSHEET_ = typeof getSpreadsheet_ === "function"
++      ? getSpreadsheet_() : SpreadsheetApp.getActiveSpreadsheet();
++  }
++  return AFK_AUTH_REQUEST_SPREADSHEET_;
+ }
+ 
+ function afkReadOnlyAuthSpreadsheet_() {

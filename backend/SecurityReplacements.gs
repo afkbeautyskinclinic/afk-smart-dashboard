@@ -1,9 +1,4 @@
-/** Candidate replacements, not an additive module.
- * Replace route_ in Code.gs and afkValidateSession_/afkHandleSecureFetch_
- * in AuthFoundation.gs; add afkSanitizeClientSettings_ once.
- * Apply apps-script-security.patch to an exported staging project instead.
- * Do not paste alongside duplicate function definitions in production.
- */
+/** Candidate replacements: replace matching functions; do not install duplicate definitions. */
 function route_(request) {
   try {
     const action = String(request.action || "health");
@@ -33,13 +28,15 @@ function route_(request) {
   }
 }
 
+
 function afkValidateSession_(sessionToken) {
   var token = String(sessionToken || "").trim();
   if (!token) throw new Error("AUTH_REQUIRED");
 
   var ss = afkAuthSpreadsheet_();
-  afkEnsureAuthSheets_(ss);
-  var sheet = afkGetOrCreateAuthSheet_(ss, AFK_AUTH_SESSIONS_SHEET, AFK_AUTH_SESSION_HEADERS);
+  // Read existing auth storage without creating sheets or rereading both schemas.
+  var sheet = ss.getSheetByName(AFK_AUTH_SESSIONS_SHEET);
+  if (!sheet) throw new Error("AUTH_INVALID");
   var headers = afkGetAuthHeaders_(sheet);
   var tokenHash = afkDigestHex_(token);
   var rowIndex = afkFindAuthRowByValue_(sheet, headers, "sessionTokenHash", tokenHash);
@@ -127,4 +124,16 @@ function afkSanitizeClientSettings_(value) {
     });
   });
   return safe;
+}
+
+
+var AFK_AUTH_REQUEST_SPREADSHEET_ = null;
+function afkAuthSpreadsheet_() {
+  // In-memory handle reused only inside this Apps Script execution, not a
+  // shared authentication cache. Every request still rereads session/user state.
+  if (!AFK_AUTH_REQUEST_SPREADSHEET_) {
+    AFK_AUTH_REQUEST_SPREADSHEET_ = typeof getSpreadsheet_ === "function"
+      ? getSpreadsheet_() : SpreadsheetApp.getActiveSpreadsheet();
+  }
+  return AFK_AUTH_REQUEST_SPREADSHEET_;
 }

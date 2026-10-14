@@ -87,3 +87,29 @@ The frontend candidate now also:
 21 local regression tests pass for the expanded frontend/backend candidate.
 The actual GitHub Pages-to-staging endpoint transport, every division’s form,
 CSV/PDF downloads, realistic multi-user load and media storage remain pending.
+
+## Loading optimization candidate — 14 October 2026 follow-up
+
+The Owner screenshot showed successful login followed by loading placeholders.
+Code review found three sequential Owner data requests, each repeating session
+validation, spreadsheet access and audit operations. The candidate frontend now
+loads all 11 Owner datasets in one request. Backend session validation reads existing
+auth storage without initializing both auth schemas; the spreadsheet handle is
+reused only within one execution, while account/session authorization is still
+reread. No shared authentication cache or weaker password hashing was introduced.
+
+Failed data reads are now recorded and represented by "Gagal memuat" on unloaded
+Owner KPIs. The read request has a 45-second fetch timeout without an automatic
+second attempt, avoiding the previous two 60-second attempts before reporting
+failure. Periodic refresh remains available for a later retry.
+
+24 local regression tests pass, including one-tier Owner requests, distinguishable
+loading failures and current-account checks despite spreadsheet handle reuse.
+The updated backend patch applies to the observed source. These optimizations
+are NOT yet deployed to the staging Web App or production, and new browser timing
+has not been measured. The existing staging version 3 remains unchanged.
+
+Observed earlier backend login was about 2.3 seconds; that measurement excludes
+full frontend rendering/network latency and is not a promise for the new version.
+Further profiling must separately measure password verification, session lookup,
+dataset reads, HTTP round trips and rendering after the updated staging deploy.
