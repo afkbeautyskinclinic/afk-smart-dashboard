@@ -190,3 +190,16 @@ for fresh browser testing. Commit 83c2897e39597ddbeda8010f11eb73c07bed13b3 passe
 both GitHub Actions runs with the 28 Node tests. Local Chrome end-to-end timing
 for version 5 remains pending. Production Apps Script and main are unchanged.
 
+## Operational launch audit — Owner-only account administration candidate
+
+The account administration route previously reused the Settings access predicate,
+which includes Inventory. The candidate now restricts account changes to Owner
+and strips userAccounts from Inventory settings mutations. Inventory retains
+operational/profile settings access, while account and menu controls are disabled
+in its frontend. The submit path preserves existing accounts for non-Owner roles.
+
+31 Node regression tests pass, including backend denial of Inventory/staff account
+administration, protection against account/menu replacement through settings, and
+frontend refusal before an unauthorized account request. The expanded patch applies
+cleanly to the captured source. Staging runtime verification remains pending at
+this entry. No production data or deployment has changed.

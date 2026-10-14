@@ -87,6 +87,12 @@ test('HTML is network-only and never returns an old cached page offline', async 
   assert.equal(h.calls.put.length, 0);
 });
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+test('frontend account administration refuses Inventory before any network request',async()=>{
+ const src=html.slice(html.indexOf('async function updateBackendAuthUsers('),html.indexOf('function formCard('));
+ const ctx={currentRole:'Inventory',getBackendConfig:()=>{throw new Error('must not request');}};
+ vm.runInNewContext(src,ctx);
+ await assert.rejects(ctx.updateBackendAuthUsers([]),/Hanya Owner/);
+});
 const mediaSource = html.slice(html.indexOf('function mediaLinks(value)'), html.indexOf('function badgeClass'));
 const context = { URL, escapeHtml: value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[c])) };
 vm.runInNewContext(mediaSource, context);

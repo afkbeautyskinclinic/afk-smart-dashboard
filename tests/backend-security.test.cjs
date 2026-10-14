@@ -4,6 +4,29 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../backend/SecurityReplacements.gs'), 'utf8');
+test('Inventory and staff cannot administer accounts, including Owner credentials',()=>{
+ for(const role of ['Inventory','CRM','Manager Marketing','Dokter']) {
+  const {ctx}=fixture();ctx.afkRequireSession_=()=>({role});
+  ctx.afkCanAccessSettings_=()=>true;
+  assert.equal(ctx.route_({action:'secureUpdateAuthUsers',method:'POST',accounts:[{role:'Owner',username:'owner',newPassword:'synthetic-password'}]}).error,'FORBIDDEN');
+ }
+ const {ctx}=fixture();ctx.afkRequireSession_=()=>({role:'Owner'});
+ assert.match(ctx.route_({action:'secureUpdateAuthUsers',method:'POST',accounts:[]}).error,/Daftar perubahan akun/);
+});
+test('Inventory can save operational settings without replacing account/menu configuration',()=>{
+ const {ctx}=fixture();let captured;
+ ctx.afkRequireSession_=()=>({role:'Inventory',userId:'inventory-user'});
+ ctx.afkIsScopedDivisionNoteRole_=()=>false;ctx.afkScopeMutationForIdentity_=x=>x;
+ ctx.afkHandleSyncMutations_=payload=>{captured=payload;return {ok:true,results:[]};};
+ const row={clinicName:'Operational edit',userAccounts:[{role:'Owner',username:'tampered',pages:[]}]};
+ ctx.afkHandleSecureSyncMutations_({mutations:[{id:'settings-test',dataset:'settings',type:'settingsUpdate',row}]});
+ assert.equal(captured.mutations[0].row.clinicName,'Operational edit');
+ assert.equal(captured.mutations[0].row.userAccounts,undefined);
+ assert.equal(row.userAccounts[0].username,'tampered');
+ ctx.afkRequireSession_=()=>({role:'Owner',userId:'owner-user'});
+ ctx.afkHandleSecureSyncMutations_({mutations:[{id:'owner-settings-test',dataset:'settings',type:'settingsUpdate',row}]});
+ assert.equal(captured.mutations[0].row.userAccounts[0].username,'tampered');
+});
 function fixture() {
   const calls = { updates: [], handlers: [] };
   const session = { userId: 'user-1', username: 'staff', role: 'CRM', active: true, expiresAt: new Date(Date.now()+60000).toISOString(), lastSeenAt: new Date().toISOString() };

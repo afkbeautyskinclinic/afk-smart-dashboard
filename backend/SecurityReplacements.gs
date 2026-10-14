@@ -153,3 +153,124 @@ function afkHandleLoginWithInitialData_(request) {
   }
   return result;
 }
+
+function afkHandleSecureSyncMutations_(request) {
+  var identity = afkRequireSession_(request);
+  var mutations = Array.isArray(request.mutations) ? request.mutations : [];
+  if (mutations.length > 20) throw new Error("Maksimal 20 perubahan per batch.");
+  var checked = [];
+  var authorizationResults = [];
+
+  mutations.forEach(function(mutation) {
+    if (!mutation || !mutation.id) {
+      authorizationResults.push({ operationId: "", dataset: "", status: "PERMANENT_ERROR", error: "Mutation atau operationId tidak valid." });
+      return;
+    }
+    var dataset = String(mutation.dataset || "");
+    var operation = mutation.type === "delete" ? "delete" : "write";
+    if (!afkCanAccessDataset_(identity.role, dataset, operation)) {
+      afkAuthorizationAudit_("AUTHORIZATION_FAILED", identity, "syncMutations:" + operation, dataset, mutation.id);
+      authorizationResults.push({ operationId: String(mutation.id), dataset: dataset, status: "FORBIDDEN", error: "Akses ditolak untuk dataset." });
+      return;
+    }
+    if (afkIsScopedDivisionNoteRole_(identity.role) && ["marketing", "content", "crm", "doctor", "medis", "inventory"].indexOf(dataset) !== -1 && mutation.type !== "update") {
+      authorizationResults.push({ operationId: String(mutation.id), dataset: dataset, status: "FORBIDDEN", error: "Role ini hanya dapat memperbarui kolom catatan pada dashboard divisi." });
+      return;
+    }
+    var safeMutation = {};
+    Object.keys(mutation).forEach(function(key) { safeMutation[key] = mutation[key]; });
+    safeMutation.actorRole = identity.role;
+    safeMutation.actorUserId = identity.userId;
+    safeMutation.actorUsername = identity.username;
+    if (dataset === "settings" && afkNormalizeAuthRole_(identity.role) !== "Owner") {
+      // Inventory may edit operational settings, but never login/menu identities.
+      safeMutation.row = {};
+      Object.keys(mutation.row || {}).forEach(function(key) {
+        if (key !== "userAccounts") safeMutation.row[key] = mutation.row[key];
+      });
+    }
+    safeMutation = afkScopeMutationForIdentity_(safeMutation, identity);
+    checked.push(safeMutation);
+  });
+
+  var payload = {};
+  Object.keys(request || {}).forEach(function(key) { payload[key] = request[key]; });
+  payload.mutations = checked;
+  var result = afkHandleSyncMutations_(payload);
+  result.results = authorizationResults.concat(result.results || []);
+  result.permanentIds = (result.permanentIds || []).concat(authorizationResults.map(function(item) { return item.operationId; }).filter(Boolean));
+  afkAuthorizationAudit_("SECURE_SYNC_MUTATIONS", identity, "syncMutations", checked.map(function(item) { return item.dataset; }).join(","), request.requestId);
+  return result;
+}
+
+function afkHandleSecureUpdateAuthUsers_(request) {
+  var identity = afkRequireSession_(request);
+  if (afkNormalizeAuthRole_(identity.role) !== "Owner") {
+    afkAuthorizationAudit_("AUTH_USER_ADMIN_FORBIDDEN", identity, "secureUpdateAuthUsers", "settings", "");
+    throw new Error("FORBIDDEN");
+  }
+
+  var accounts = Array.isArray(request.accounts) ? request.accounts : [];
+  if (!accounts.length || accounts.length > 20) throw new Error("Daftar perubahan akun tidak valid.");
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error("Layanan akun sedang sibuk. Silakan coba lagi.");
+  try {
+    var ss = afkAuthSpreadsheet_();
+    afkEnsureAuthSheets_(ss);
+    var usersSheet = afkGetOrCreateAuthSheet_(ss, AFK_AUTH_USERS_SHEET, AFK_AUTH_USER_HEADERS);
+    var userHeaders = afkGetAuthHeaders_(usersSheet);
+    var sessionSheet = afkGetOrCreateAuthSheet_(ss, AFK_AUTH_SESSIONS_SHEET, AFK_AUTH_SESSION_HEADERS);
+    var sessionHeaders = afkGetAuthHeaders_(sessionSheet);
+    var currentSessionHash = afkDigestHex_(String(request.sessionToken || ""));
+    var results = [];
+
+    accounts.forEach(function(change) {
+      var role = afkNormalizeAuthRole_(change && change.role);
+      var originalUsername = String(change && change.originalUsername || "").trim();
+      var username = String(change && change.username || "").trim();
+      var newPassword = String(change && change.newPassword || "");
+      if (!afkIsKnownAuthRole_(role)) throw new Error("Role akun tidak dikenal.");
+      if (!/^[A-Za-z0-9._-]{3,64}$/.test(username)) throw new Error("Username " + role + " harus 3-64 karakter dan hanya boleh berisi huruf, angka, titik, garis bawah, atau tanda minus.");
+      if (newPassword && (newPassword.length < 8 || newPassword.length > 128)) throw new Error("Password baru " + role + " harus terdiri dari 8-128 karakter.");
+
+      var rowIndex = afkFindAuthRowByValue_(usersSheet, userHeaders, "role", role);
+      if (rowIndex < 2 && originalUsername) rowIndex = afkFindAuthRowByValue_(usersSheet, userHeaders, "usernameKey", afkUsernameKey_(originalUsername));
+      if (rowIndex < 2) throw new Error("Akun " + role + " tidak ditemukan.");
+
+      var duplicateIndex = afkFindAuthRowByValue_(usersSheet, userHeaders, "usernameKey", afkUsernameKey_(username));
+      if (duplicateIndex > 1 && duplicateIndex !== rowIndex) throw new Error("Username sudah digunakan akun lain.");
+
+      var current = afkReadAuthRow_(usersSheet, userHeaders, rowIndex);
+      var update = {
+        username: username,
+        usernameKey: afkUsernameKey_(username),
+        role: role,
+        active: role === "Owner" ? true : change.active !== false,
+        updatedAt: new Date().toISOString()
+      };
+      if (newPassword) {
+        var passwordRecord = afkBuildPasswordRecord_(newPassword);
+        update.passwordHash = passwordRecord.passwordHash;
+        update.passwordSalt = passwordRecord.passwordSalt;
+        update.passwordAlgorithm = passwordRecord.passwordAlgorithm;
+        update.passwordIterations = passwordRecord.passwordIterations;
+      }
+      afkUpdateAuthRow_(usersSheet, userHeaders, rowIndex, update);
+
+      var identityChanged = username !== String(current.username || "") || Boolean(newPassword) || afkBoolean_(current.active) !== update.active;
+      if (identityChanged) afkRevokeUserSessionsExcept_(sessionSheet, sessionHeaders, current.userId, currentSessionHash);
+      results.push({ role: role, username: username, active: update.active, passwordChanged: Boolean(newPassword) });
+    });
+
+    afkAuthAudit_("AUTH_USERS_ADMIN_UPDATED", "Akun pengguna diperbarui dari menu Setting.", {
+      userId: identity.userId,
+      username: identity.username,
+      role: identity.role,
+      changedRoles: results.map(function(item) { return item.role; })
+    });
+    return { ok: true, updated: results, callerSessionRevoked: false };
+  } finally {
+    lock.releaseLock();
+  }
+}

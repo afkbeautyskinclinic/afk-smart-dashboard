@@ -3389,7 +3389,7 @@ function renderSettings() {
   if (!isSettingsRole()) {
     page.innerHTML = `
       ${sectionHead("Setting", "Menu ini hanya dapat diakses oleh Owner dan Inventory.")}
-      <div class="empty-state">Silakan masuk sebagai Owner atau Inventory untuk mengatur akun, hak akses, dan profil klinik.</div>
+      <div class="empty-state">Owner mengelola akun dan hak akses. Owner atau Inventory dapat mengatur profil dan referensi operasional klinik.</div>
     `;
     return;
   }
@@ -3418,7 +3418,7 @@ function renderSettings() {
         ${textarea("platforms", "Platform List", state.settings.platforms)}
       </div>
 
-      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Owner dan Inventory dapat mengatur username, password baru, status akun, dan akses menu. Kosongkan password jika tidak ingin mengubahnya.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Hanya Owner dapat mengatur username, password baru, status akun, dan akses menu. Kosongkan password jika tidak ingin mengubahnya.</p></div></div>
       <div class="table-wrap settings-table-wrap">
         <table class="settings-table">
           <thead><tr><th>Role</th><th>Username</th><th>Password Baru</th><th>Aktif</th></tr></thead>
@@ -3435,7 +3435,7 @@ function renderSettings() {
         </table>
       </div>
 
-      <div class="section-head settings-section"><div><h2>Hak Akses Menu</h2><p>Setting hanya bisa dibuka Owner dan Inventory. Role lain mengikuti centang menu di bawah ini.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Hak Akses Menu</h2><p>Hanya Owner dapat mengubah hak akses menu. Inventory dapat melihat konfigurasi ini.</p></div></div>
       <div class="table-wrap settings-table-wrap access-matrix">
         <table class="settings-table">
           <thead><tr><th>Role</th>${accessPages.map(item => `<th>${escapeHtml(item.label)}</th>`).join("")}<th>Setting</th></tr></thead>
@@ -3456,6 +3456,9 @@ function renderSettings() {
       </div>
     </form>
   `;
+  if (currentRole !== "Owner") {
+    document.querySelectorAll('#settingsForm [name^="account_"], #settingsForm [name^="access_"]').forEach(control => { control.disabled = true; });
+  }
   document.getElementById("settingsForm").addEventListener("submit", async event => {
     event.preventDefault();
     const submitButton = event.currentTarget.querySelector(".primary-button");
@@ -3465,6 +3468,7 @@ function renderSettings() {
     const existingAccounts = getUserAccounts();
     const authChanges = [];
     const updatedAccounts = existingAccounts.map((account, index) => {
+      if (currentRole !== "Owner") return account;
       const pages = accessPages
         .filter(item => formData.get(`access_${index}_${item.id}`) === "on")
         .map(item => item.id);
@@ -3527,6 +3531,7 @@ function renderSettings() {
 }
 
 async function updateBackendAuthUsers(accounts) {
+  if (currentRole !== "Owner") throw new Error("Hanya Owner dapat mengubah akun pengguna.");
   const backend = getBackendConfig();
   const sessionToken = getBackendSessionToken();
   if (!backend.url || !sessionToken) throw new Error("Sesi backend diperlukan untuk mengubah akun pengguna.");

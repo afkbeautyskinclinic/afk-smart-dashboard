@@ -22,6 +22,9 @@ Editor source and deployed version source have not been compared byte-for-byte.
   current session/account state is still read for authorization.
 - `afkHandleLoginWithInitialData_`: optionally include the fixed 11 Owner datasets
   after login through the same secure-fetch session and authorization checks.
+- `afkHandleSecureUpdateAuthUsers_`: only Owner may administer accounts.
+- `afkHandleSecureSyncMutations_`: Inventory operational settings writes cannot
+  replace userAccounts or their menu/access configuration.
 - `afkHandleSecureFetch_`: recursively remove credential fields from returned
   Settings, including legacy account passwords, token, secret and API-key fields.
   The spreadsheet's stored Settings are not modified.
@@ -42,7 +45,8 @@ If it does not apply cleanly, compare the current source instead of forcing it.
 `SecurityReplacements.gs` contains the same candidate replacement functions for
 review/testing. It is NOT an additive module: do not paste it alongside existing
 functions of the same names. Replace route_ in Code.gs; replace afkValidateSession_,
-afkHandleSecureFetch_ and afkAuthSpreadsheet_ in AuthFoundation.gs. Add the request
+afkHandleSecureFetch_, afkAuthSpreadsheet_, afkHandleSecureUpdateAuthUsers_ and
+afkHandleSecureSyncMutations_ in AuthFoundation.gs. Add the request
 spreadsheet variable, sanitizer and login initial-data helper once. The unified
 patch is the preferred installation path because it includes all additions.
 
@@ -64,7 +68,7 @@ to expose old code unless it is reviewed separately.
 
     node --test tests/security.test.cjs tests/backend-security.test.cjs
 
-28 tests pass in mocked Node.js contexts. The backend tests run the replacement functions with synthetic account,
+31 tests pass in mocked Node.js contexts. The backend tests run the replacement functions with synthetic account,
 session and settings data. They do not certify Apps Script service behavior,
 production authentication, multi-user performance or deployed-version consistency.
 
