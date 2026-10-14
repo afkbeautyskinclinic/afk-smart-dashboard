@@ -144,3 +144,23 @@ successfully in the browser. Full Owner browser verification remains pending:
 two secure browser-auth requests could not target the nested iframe password
 field, so manual login handoff is required. Do not treat the frontend loading
 issue as resolved until that verification succeeds.
+
+## Login response with authenticated Owner initial data — candidate
+
+Fresh Owner login can request initial data in the login response, reducing the
+normal path from two sequential HTTP requests to one. The server chooses the
+fixed 11 Owner datasets only after a successful login with the current Owner
+role, and calls the existing secure-fetch handler with the newly created session.
+That handler revalidates the session/current account and dataset authorization.
+Staff never receive Owner initial data by setting the client flag.
+
+The frontend accepts only expected array datasets for the authenticated Owner,
+protects datasets with pending mutations, and marks returned datasets loaded so
+the progressive loader skips their second request. Old backends and ordinary
+read failures retain the normal fetch fallback. Revoked/expired sessions fail
+closed. Login requests no longer automatically retry, avoiding repeated session
+creation when the combined request fails. Password hashing remains unchanged.
+
+28 local Node regression tests pass; the full backend patch applies cleanly to
+the captured source. Staging runtime and browser verification of this candidate
+are pending at this entry. Production remains unchanged.

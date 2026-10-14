@@ -18,7 +18,7 @@
 -    if (action === "uploadTreatmentMedia") return guarded_(request, () => uploadTreatmentMedia_(request));
 -    return json_({ ok: false, error: "Action backend tidak dikenal: " + action });
 +    const handlers = {
-+      login: afkHandleLogin_,
++      login: afkHandleLoginWithInitialData_,
 +      logout: afkHandleLogout_,
 +      validateSession: afkHandleValidateSession_,
 +      secureFetch: afkHandleSecureFetch_,
@@ -145,3 +145,23 @@
  }
  
  function afkReadOnlyAuthSpreadsheet_() {
+@@ -1260,3 +1294,19 @@
+   Logger.log(String(message || ""));
+   if (typeof console !== "undefined" && console.log) console.log(String(message || ""));
+ }
++
++function afkHandleLoginWithInitialData_(request) {
++  var result = afkHandleLogin_(request);
++  if (!result.ok || !result.success || !result.sessionToken || !result.user ||
++      request.includeOwnerData !== true || afkNormalizeAuthRole_(result.user.role) !== "Owner") return result;
++  var datasets = ["manager", "marketing", "crm", "content", "doctor", "medis", "inventory",
++    "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
++  try {
++    // Reuse current-session and dataset authorization checks, even after login.
++    result.initialData = afkHandleSecureFetch_({sessionToken: result.sessionToken, datasets: datasets});
++  } catch (error) {
++    if (/^AUTH_(REQUIRED|INVALID|REVOKED|EXPIRED)$/.test(String(error.message || ""))) throw error;
++    result.initialDataError = "INITIAL_DATA_UNAVAILABLE";
++  }
++  return result;
++}

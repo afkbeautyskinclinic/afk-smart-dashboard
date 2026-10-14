@@ -1,6 +1,7 @@
 # Candidate Apps Script security patch
 
-Status: prepared from the AFK editor on 14 October 2026; not installed or deployed.
+Status: prepared from the AFK editor on 14 October 2026; not installed in production.
+See STAGING-RESULTS.md for staging versions and verification status.
 The frontend's Web App URL matches the active deployment named
 "AFK Media Safety - 2 MB Upload Limit", version 19 (21 September 2026).
 Two active deployments were listed; only the matching one was inspected.
@@ -17,6 +18,10 @@ Editor source and deployed version source have not been compared byte-for-byte.
 - `afkValidateSession_`: reject invalid expiration timestamps; check the current
   account still exists, is active, matches the session userId and has the same
   known role. Role changes invalidate old sessions rather than upgrading them.
+- `afkAuthSpreadsheet_`: reuse the spreadsheet handle within one execution only;
+  current session/account state is still read for authorization.
+- `afkHandleLoginWithInitialData_`: optionally include the fixed 11 Owner datasets
+  after login through the same secure-fetch session and authorization checks.
 - `afkHandleSecureFetch_`: recursively remove credential fields from returned
   Settings, including legacy account passwords, token, secret and API-key fields.
   The spreadsheet's stored Settings are not modified.
@@ -36,8 +41,10 @@ The patch is based on the editor source, not the older sync module in GitHub.
 If it does not apply cleanly, compare the current source instead of forcing it.
 `SecurityReplacements.gs` contains the same candidate replacement functions for
 review/testing. It is NOT an additive module: do not paste it alongside existing
-functions of the same names. Replace route_ in Code.gs, replace the two specified
-functions in AuthFoundation.gs, and add the sanitizer once.
+functions of the same names. Replace route_ in Code.gs; replace afkValidateSession_,
+afkHandleSecureFetch_ and afkAuthSpreadsheet_ in AuthFoundation.gs. Add the request
+spreadsheet variable, sanitizer and login initial-data helper once. The unified
+patch is the preferred installation path because it includes all additions.
 
 Create a separate Apps Script project with a separate spreadsheet containing only
 synthetic users and reports. Set its spreadsheet/media properties to staging
@@ -57,8 +64,7 @@ to expose old code unless it is reviewed separately.
 
     node --test tests/security.test.cjs tests/backend-security.test.cjs
 
-17 tests pass: 9 frontend tests and 8 additional backend tests in mocked Node.js
-contexts. The backend tests run the replacement functions with synthetic account,
+28 tests pass in mocked Node.js contexts. The backend tests run the replacement functions with synthetic account,
 session and settings data. They do not certify Apps Script service behavior,
 production authentication, multi-user performance or deployed-version consistency.
 

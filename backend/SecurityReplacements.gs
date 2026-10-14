@@ -4,7 +4,7 @@ function route_(request) {
     const action = String(request.action || "health");
     if (action === "health") return json_(health_());
     const handlers = {
-      login: afkHandleLogin_,
+      login: afkHandleLoginWithInitialData_,
       logout: afkHandleLogout_,
       validateSession: afkHandleValidateSession_,
       secureFetch: afkHandleSecureFetch_,
@@ -136,4 +136,20 @@ function afkAuthSpreadsheet_() {
       ? getSpreadsheet_() : SpreadsheetApp.getActiveSpreadsheet();
   }
   return AFK_AUTH_REQUEST_SPREADSHEET_;
+}
+
+function afkHandleLoginWithInitialData_(request) {
+  var result = afkHandleLogin_(request);
+  if (!result.ok || !result.success || !result.sessionToken || !result.user ||
+      request.includeOwnerData !== true || afkNormalizeAuthRole_(result.user.role) !== "Owner") return result;
+  var datasets = ["manager", "marketing", "crm", "content", "doctor", "medis", "inventory",
+    "managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
+  try {
+    // Reuse current-session and dataset authorization checks, even after login.
+    result.initialData = afkHandleSecureFetch_({sessionToken: result.sessionToken, datasets: datasets});
+  } catch (error) {
+    if (/^AUTH_(REQUIRED|INVALID|REVOKED|EXPIRED)$/.test(String(error.message || ""))) throw error;
+    result.initialDataError = "INITIAL_DATA_UNAVAILABLE";
+  }
+  return result;
 }

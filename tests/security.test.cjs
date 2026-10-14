@@ -147,6 +147,25 @@ test('Owner initial load requests all source datasets in a single tier',()=>{
  const ctx={datasetsForPage:()=>[]};vm.runInNewContext(declarations+'\nthis.tiers=PAGE_PROGRESSIVE_TIERS.owner;',ctx);
  assert.equal(ctx.tiers.length,1);assert.equal(new Set(ctx.tiers[0]).size,11);
 });
+test('initial Owner data skips a redundant read, protects pending changes and ignores unexpected data',async()=>{
+ const declarations=html.slice(html.indexOf('const OWNER_TIER_1_DATASETS'),html.indexOf('const OWNER_MANAGED_DATASETS'));
+ const apply=html.slice(html.indexOf('function applyInitialOwnerData('),html.indexOf('function setLoginLoading'));
+ const loading=html.slice(html.indexOf('async function startRoleAwareProgressiveLoad('),html.indexOf('async function validateBackendSessionOnStart'));
+ const loaded=new Set(),calls=[];let queue=[];
+ const ctx={currentRole:'Owner',state:{session:{authenticated:true},crm:[{name:'local'}]},getOwnedMutationQueue:()=>queue,
+  markDatasetsLoaded:keys=>keys.forEach(key=>loaded.add(key)),normalizeDashboardState:()=>{},mergeFetchedColumnMetadata:()=>{},setSyncStatus:()=>{},
+  datasetsForPage:()=>[],canViewDataset:()=>true,performance:{now:()=>0},console:{info:()=>{}},
+  startBackgroundDataLoad:async options=>{const missing=options.datasets.filter(key=>!loaded.has(key));if(missing.length)calls.push(missing);}};
+ vm.runInNewContext(declarations+'\n'+apply+'\n'+loading+'\nthis.datasets=PAGE_PROGRESSIVE_TIERS.owner.flat();',ctx);
+ const result={ok:true,success:true,data:Object.fromEntries(ctx.datasets.map(key=>[key,[]]))};result.data.settings={backendToken:'must not merge'};
+ assert.equal(ctx.applyInitialOwnerData(result),true);assert.equal(ctx.state.settings,undefined);
+ await ctx.startRoleAwareProgressiveLoad('owner');assert.equal(calls.length,0);
+ loaded.clear();queue=[{dataset:'crm'}];ctx.state.crm=[{name:'pending'}];
+ assert.equal(ctx.applyInitialOwnerData(result),false);assert.equal(ctx.state.crm[0].name,'pending');
+ await ctx.startRoleAwareProgressiveLoad('owner');assert.deepEqual(Array.from(calls[0]),['crm']);
+ ctx.currentRole='CRM';assert.equal(ctx.applyInitialOwnerData(result),false);
+ ctx.currentRole='Owner';assert.equal(ctx.applyInitialOwnerData(null),false);
+});
 test('Owner pending label distinguishes failed data loading from in-progress loading',()=>{
  const src=html.slice(html.indexOf('function ownerPendingLabel()'),html.indexOf('function ownerLoadingSection'));
  const ctx={datasetLoadState:new Map()};vm.runInNewContext(src,ctx);

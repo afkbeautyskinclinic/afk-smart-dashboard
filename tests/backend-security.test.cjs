@@ -41,6 +41,31 @@ test('legacy shared-token actions are disabled without invoking their handlers',
   }
   assert.equal(calls.handlers.length,0);
 });
+test('Owner login initial data uses the newly created session and fixed authorized datasets', () => {
+  const {ctx}=fixture(); let captured;
+  ctx.afkHandleLogin_=()=>({ok:true,success:true,sessionToken:'new-session',user:{role:'Owner'}});
+  ctx.afkHandleSecureFetch_=request=>{captured=request;return {ok:true,success:true,data:{crm:[]}};};
+  const result=ctx.route_({action:'login',method:'POST',includeOwnerData:true,datasets:['settings']});
+  assert.equal(result.initialData.success,true); assert.equal(captured.sessionToken,'new-session');
+  assert.equal(captured.datasets.length,11); assert.ok(!captured.datasets.includes('settings'));
+});
+test('failed login and non-Owner roles never receive Owner initial data', () => {
+  const {ctx}=fixture(); ctx.afkHandleSecureFetch_=()=>{throw new Error('must not read');};
+  for(const login of [{ok:false},{ok:true,success:true,sessionToken:'new-session',user:{role:'CRM'}}]) {
+    ctx.afkHandleLogin_=()=>login;
+    assert.equal(ctx.afkHandleLoginWithInitialData_({includeOwnerData:true}),login);
+  }
+});
+test('initial read failures preserve successful login, while revoked sessions fail closed', () => {
+  const {ctx}=fixture();
+  ctx.afkHandleLogin_=()=>({ok:true,success:true,sessionToken:'new-session',user:{role:'Owner'}});
+  ctx.afkHandleSecureFetch_=()=>{throw new Error('private backend details');};
+  const result=ctx.afkHandleLoginWithInitialData_({includeOwnerData:true});
+  assert.equal(result.ok,true); assert.equal(result.initialDataError,'INITIAL_DATA_UNAVAILABLE');
+  assert.equal(result.initialData,undefined);
+  ctx.afkHandleSecureFetch_=()=>{throw new Error('AUTH_REVOKED');};
+  assert.equal(ctx.route_({action:'login',method:'POST',includeOwnerData:true}).error,'AUTH_REVOKED');
+});
 test('unknown/prototype actions rejected; login requires POST; secureFetch remains GET compatible', () => {
   const {ctx}=fixture();
   for(const action of ['constructor','__proto__','unknown']) assert.equal(ctx.route_({action,method:'POST'}).ok,false);

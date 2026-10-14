@@ -2100,12 +2100,13 @@ async function loginWithBackendAuth(account, password) {
     body: JSON.stringify({
       action: "login",
       username: account.username,
+      includeOwnerData: normalizeRoleName(account.role) === "Owner",
       password
     })
   }, {
     context: "Login",
     timeoutMs: 45000,
-    retries: 1,
+    retries: 0,
     retryPolicy: "server-only"
   });
   const responseAt = performance.now();
@@ -2177,12 +2178,14 @@ async function handleLogin(event) {
   let authenticatedRole = role;
   let backendAuthenticated = false;
   let loginTiming = null;
+  let initialData = null;
   try {
     const backendLogin = await loginWithBackendAuth(account, password);
     loginTiming = backendLogin?.frontendTiming || null;
     if (backendLogin) {
       authenticatedRole = normalizeRoleName(backendLogin.user.role);
       backendAuthenticated = true;
+      initialData = backendLogin.initialData || null;
       activePage = authenticatedRole === "Owner" ? "owner" : rolePage(authenticatedRole);
       saveBackendAuthSession(backendLogin.user, backendLogin.sessionToken, backendLogin.expiresAt, activePage);
       clearSessionDatasetCache();
@@ -2213,6 +2216,7 @@ async function handleLogin(event) {
   state.session.activePage = activePage;
   saveCurrentTabSession(authenticatedRole, activePage);
   els.roleSelect.value = authenticatedRole;
+  applyInitialOwnerData(initialData);
   saveState();
   buildNavigation();
   const shellStartedAt = performance.now();
@@ -2233,6 +2237,22 @@ async function handleLogin(event) {
   } finally {
     setLoginLoading(false);
   }
+}
+
+function applyInitialOwnerData(result) {
+  if (currentRole !== "Owner" || !state.session.authenticated || !result?.ok || !result.success) return false;
+  const requested = PAGE_PROGRESSIVE_TIERS.owner.flat();
+  const pending = new Set(getOwnedMutationQueue().map(item => item.dataset));
+  const data = Object.fromEntries(requested.filter(dataset =>
+    !pending.has(dataset) && Array.isArray(result.data?.[dataset])
+  ).map(dataset => [dataset, result.data[dataset]]));
+  state = { ...state, ...data, session: state.session };
+  markDatasetsLoaded(Object.keys(data));
+  normalizeDashboardState(state);
+  mergeFetchedColumnMetadata(result);
+  setSyncStatus({ lastFetchAt: new Date().toISOString(), lastFetchDatasets: Object.keys(data),
+    backendFetchTiming: result.timing || null, lastError: "" });
+  return requested.every(dataset => Object.prototype.hasOwnProperty.call(data, dataset));
 }
 
 function setLoginLoading(isLoading, message = "") {
