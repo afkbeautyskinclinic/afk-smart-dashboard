@@ -868,6 +868,7 @@ let charts = {};
 let deferredInstallPrompt = null;
 let pdfExportInProgress = false;
 let autoSyncTimer = null;
+let serverPollTimer = null;
 let autoSyncPaused = false;
 let syncInProgress = false;
 let syncChannel = null;
@@ -884,7 +885,7 @@ const OWNER_TIER_1_DATASETS = ["manager", "marketing", "crm"];
 const OWNER_TIER_2_OPERATIONAL_DATASETS = ["content", "doctor", "medis", "inventory"];
 const OWNER_TIER_2_CONTROL_DATASETS = ["managerMarketingDaily", "patientCommand", "managerDecisionLog", "ownerEscalation"];
 const PAGE_PROGRESSIVE_TIERS = {
-  owner: [OWNER_TIER_1_DATASETS, OWNER_TIER_2_OPERATIONAL_DATASETS, OWNER_TIER_2_CONTROL_DATASETS],
+  owner: [[...OWNER_TIER_1_DATASETS, ...OWNER_TIER_2_OPERATIONAL_DATASETS, ...OWNER_TIER_2_CONTROL_DATASETS]],
   manager: [["manager"], ["inventory", "doctor", "medis", "ownerEscalation"]],
   managerMarketing: [["managerMarketingDaily", "marketing", "crm"], ["content", "patientCommand", "managerDecisionLog", "ownerEscalation"]],
   marketing: [["marketing"]],
@@ -1616,9 +1617,21 @@ function isReloadNavigation() {
 }
 
 function initAutoSync() {
+  clearInterval(serverPollTimer);
+  serverPollTimer = setInterval(pollActiveDashboard, 30000 + Math.floor(Math.random() * 15000));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") pollActiveDashboard();
+  });
   window.addEventListener("online", () => scheduleAutoSync(800 + Math.floor(Math.random() * 4000)));
   clearTimeout(autoSyncTimer);
   if (getOwnedMutationQueue().length) scheduleAutoSync(800 + Math.floor(Math.random() * 2400));
+}
+
+function pollActiveDashboard() {
+  if (!state.session.authenticated || document.visibilityState !== "visible" || !navigator.onLine ||
+      syncInProgress || secureFetchInProgress || getOwnedMutationQueue().length) return;
+  const datasets = activePage === "owner" ? DATASET_KEYS.filter(canViewDataset) : datasetsForPage(activePage);
+  return startBackgroundDataLoad({ force: true, source: "poll", datasets });
 }
 
 function datasetsForPage(pageId = activePage) {
@@ -2053,7 +2066,7 @@ function registerServiceWorker() {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("./service-worker.js")
-      .then(() => toast("Aplikasi siap dipakai offline setelah install."))
+      .then(() => toast("Aplikasi siap. Login dan data memerlukan koneksi internet."))
       .catch(() => toast("Service worker belum aktif. Coba buka lewat localhost/HTTPS."));
   });
 }
@@ -2087,12 +2100,13 @@ async function loginWithBackendAuth(account, password) {
     body: JSON.stringify({
       action: "login",
       username: account.username,
+      includeOwnerData: normalizeRoleName(account.role) === "Owner",
       password
     })
   }, {
     context: "Login",
     timeoutMs: 45000,
-    retries: 1,
+    retries: 0,
     retryPolicy: "server-only"
   });
   const responseAt = performance.now();
@@ -2164,12 +2178,14 @@ async function handleLogin(event) {
   let authenticatedRole = role;
   let backendAuthenticated = false;
   let loginTiming = null;
+  let initialData = null;
   try {
     const backendLogin = await loginWithBackendAuth(account, password);
     loginTiming = backendLogin?.frontendTiming || null;
     if (backendLogin) {
       authenticatedRole = normalizeRoleName(backendLogin.user.role);
       backendAuthenticated = true;
+      initialData = backendLogin.initialData || null;
       activePage = authenticatedRole === "Owner" ? "owner" : rolePage(authenticatedRole);
       saveBackendAuthSession(backendLogin.user, backendLogin.sessionToken, backendLogin.expiresAt, activePage);
       clearSessionDatasetCache();
@@ -2200,6 +2216,7 @@ async function handleLogin(event) {
   state.session.activePage = activePage;
   saveCurrentTabSession(authenticatedRole, activePage);
   els.roleSelect.value = authenticatedRole;
+  applyInitialOwnerData(initialData);
   saveState();
   buildNavigation();
   const shellStartedAt = performance.now();
@@ -2220,6 +2237,22 @@ async function handleLogin(event) {
   } finally {
     setLoginLoading(false);
   }
+}
+
+function applyInitialOwnerData(result) {
+  if (currentRole !== "Owner" || !state.session.authenticated || !result?.ok || !result.success) return false;
+  const requested = PAGE_PROGRESSIVE_TIERS.owner.flat();
+  const pending = new Set(getOwnedMutationQueue().map(item => item.dataset));
+  const data = Object.fromEntries(requested.filter(dataset =>
+    !pending.has(dataset) && Array.isArray(result.data?.[dataset])
+  ).map(dataset => [dataset, result.data[dataset]]));
+  state = { ...state, ...data, session: state.session };
+  markDatasetsLoaded(Object.keys(data));
+  normalizeDashboardState(state);
+  mergeFetchedColumnMetadata(result);
+  setSyncStatus({ lastFetchAt: new Date().toISOString(), lastFetchDatasets: Object.keys(data),
+    backendFetchTiming: result.timing || null, lastError: "" });
+  return requested.every(dataset => Object.prototype.hasOwnProperty.call(data, dataset));
 }
 
 function setLoginLoading(isLoading, message = "") {
@@ -2435,22 +2468,22 @@ function renderOwner() {
     ${renderOwnerControlTower(k, { tier1Ready, operationalReady, controlReady })}
     ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
-      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : "Memuat...")}
-      ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
-      ${kpi("Total Leads", tier1Ready ? k.totalLeads : "Memuat...")}
-      ${kpi("Qualified Leads", tier1Ready ? k.qualified : "Memuat...")}
-      ${kpi("Booking", tier1Ready ? k.booking : "Memuat...")}
-      ${kpi("Show-Up", tier1Ready ? k.showUp : "Memuat...")}
-      ${kpi("Treatment", operationalReady ? k.treatment : "Memuat...")}
-      ${kpi("Repeat", tier1Ready ? k.repeat : "Memuat...")}
-      ${kpi("Rebooking", operationalReady ? k.rebooking : "Memuat...")}
-      ${kpi("VIP", tier1Ready ? k.vip : "Memuat...")}
-      ${kpi("Referral", tier1Ready ? k.referral : "Memuat...")}
-      ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : "Memuat...")}
-      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : "Memuat...")}
-      ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : "Memuat...")}
-      ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : "Memuat...")}
-      ${kpi("Stock Critical", operationalReady ? k.stockCritical : "Memuat...")}
+      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : ownerPendingLabel())}
+      ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
+      ${kpi("Total Leads", tier1Ready ? k.totalLeads : ownerPendingLabel())}
+      ${kpi("Qualified Leads", tier1Ready ? k.qualified : ownerPendingLabel())}
+      ${kpi("Booking", tier1Ready ? k.booking : ownerPendingLabel())}
+      ${kpi("Show-Up", tier1Ready ? k.showUp : ownerPendingLabel())}
+      ${kpi("Treatment", operationalReady ? k.treatment : ownerPendingLabel())}
+      ${kpi("Repeat", tier1Ready ? k.repeat : ownerPendingLabel())}
+      ${kpi("Rebooking", operationalReady ? k.rebooking : ownerPendingLabel())}
+      ${kpi("VIP", tier1Ready ? k.vip : ownerPendingLabel())}
+      ${kpi("Referral", tier1Ready ? k.referral : ownerPendingLabel())}
+      ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : ownerPendingLabel())}
+      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : ownerPendingLabel())}
+      ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : ownerPendingLabel())}
+      ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : ownerPendingLabel())}
+      ${kpi("Stock Critical", operationalReady ? k.stockCritical : ownerPendingLabel())}
     </div>
     ${operationalReady ? renderIntegratedOwnerDashboard() : ownerLoadingSection("Integrated Owner Dashboard AFK", "Memuat rekonsiliasi operasional dan alert lintas divisi...")}<div class="two-col">
       ${chartCard("Funnel Klinik", "funnelChart")}
@@ -2473,24 +2506,28 @@ function renderOwnerControlTower(k, readiness = {}) {
   return `<section class="integrated-owner owner-control-tower">
     ${sectionHead("Owner Control Tower", "Ringkasan bisnis bertingkat dari operasional, manager, hingga Owner agar keputusan utama dapat dilihat dalam satu halaman.")}
     <div class="kpi-grid">
-      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : "Memuat...")}
-      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : "Memuat...")}
-      ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : "Memuat...")}
-      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : "Memuat...")}
-      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : "Memuat...")}
-      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : "Memuat...")}
-      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : "Memuat...")}
-      ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : "Memuat...")}
-      ${kpi("Booking", readiness.tier1Ready ? k.booking : "Memuat...")}
-      ${kpi("Show Up", readiness.tier1Ready ? k.showUp : "Memuat...")}
-      ${kpi("Action Priority", readiness.controlReady ? problems.length : "Memuat...")}
-      ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : "Memuat...")}
+      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : ownerPendingLabel())}
+      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : ownerPendingLabel())}
+      ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
+      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : ownerPendingLabel())}
+      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : ownerPendingLabel())}
+      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : ownerPendingLabel())}
+      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : ownerPendingLabel())}
+      ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : ownerPendingLabel())}
+      ${kpi("Booking", readiness.tier1Ready ? k.booking : ownerPendingLabel())}
+      ${kpi("Show Up", readiness.tier1Ready ? k.showUp : ownerPendingLabel())}
+      ${kpi("Action Priority", readiness.controlReady ? problems.length : ownerPendingLabel())}
+      ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : ownerPendingLabel())}
     </div>
     <div class="two-col">
       ${ownerListCard("Lima Masalah Terbesar", problems, readiness.controlReady ? "Belum ada masalah prioritas yang perlu ditindaklanjuti." : "Memuat data kontrol manager...")}
       ${ownerListCard("Lima Keputusan Untuk Owner", decisions, readiness.controlReady ? "Belum ada keputusan yang menunggu perhatian Owner." : "Memuat keputusan dan eskalasi...")}
     </div>
   </section>`;
+}
+
+function ownerPendingLabel() {
+  return [...datasetLoadState.values()].some(item => item.error) ? "Gagal memuat" : "Memuat...";
 }
 
 function ownerLoadingSection(title, message) {
@@ -3352,7 +3389,7 @@ function renderSettings() {
   if (!isSettingsRole()) {
     page.innerHTML = `
       ${sectionHead("Setting", "Menu ini hanya dapat diakses oleh Owner dan Inventory.")}
-      <div class="empty-state">Silakan masuk sebagai Owner atau Inventory untuk mengatur akun, hak akses, dan profil klinik.</div>
+      <div class="empty-state">Owner mengelola akun dan hak akses. Owner atau Inventory dapat mengatur profil dan referensi operasional klinik.</div>
     `;
     return;
   }
@@ -3381,7 +3418,7 @@ function renderSettings() {
         ${textarea("platforms", "Platform List", state.settings.platforms)}
       </div>
 
-      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Owner dan Inventory dapat mengatur username, password baru, status akun, dan akses menu. Kosongkan password jika tidak ingin mengubahnya.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Akun Pengguna</h2><p>Hanya Owner dapat mengatur username, password baru, status akun, dan akses menu. Kosongkan password jika tidak ingin mengubahnya.</p></div></div>
       <div class="table-wrap settings-table-wrap">
         <table class="settings-table">
           <thead><tr><th>Role</th><th>Username</th><th>Password Baru</th><th>Aktif</th></tr></thead>
@@ -3398,7 +3435,7 @@ function renderSettings() {
         </table>
       </div>
 
-      <div class="section-head settings-section"><div><h2>Hak Akses Menu</h2><p>Setting hanya bisa dibuka Owner dan Inventory. Role lain mengikuti centang menu di bawah ini.</p></div></div>
+      <div class="section-head settings-section"><div><h2>Hak Akses Menu</h2><p>Hanya Owner dapat mengubah hak akses menu. Inventory dapat melihat konfigurasi ini.</p></div></div>
       <div class="table-wrap settings-table-wrap access-matrix">
         <table class="settings-table">
           <thead><tr><th>Role</th>${accessPages.map(item => `<th>${escapeHtml(item.label)}</th>`).join("")}<th>Setting</th></tr></thead>
@@ -3419,6 +3456,9 @@ function renderSettings() {
       </div>
     </form>
   `;
+  if (currentRole !== "Owner") {
+    document.querySelectorAll('#settingsForm [name^="account_"], #settingsForm [name^="access_"]').forEach(control => { control.disabled = true; });
+  }
   document.getElementById("settingsForm").addEventListener("submit", async event => {
     event.preventDefault();
     const submitButton = event.currentTarget.querySelector(".primary-button");
@@ -3428,6 +3468,7 @@ function renderSettings() {
     const existingAccounts = getUserAccounts();
     const authChanges = [];
     const updatedAccounts = existingAccounts.map((account, index) => {
+      if (currentRole !== "Owner") return account;
       const pages = accessPages
         .filter(item => formData.get(`access_${index}_${item.id}`) === "on")
         .map(item => item.id);
@@ -3490,6 +3531,7 @@ function renderSettings() {
 }
 
 async function updateBackendAuthUsers(accounts) {
+  if (currentRole !== "Owner") throw new Error("Hanya Owner dapat mengubah akun pengguna.");
   const backend = getBackendConfig();
   const sessionToken = getBackendSessionToken();
   if (!backend.url || !sessionToken) throw new Error("Sesi backend diperlukan untuk mengubah akun pengguna.");
@@ -4263,6 +4305,10 @@ function exportPdf(dataset) {
 }
 
 function getExportSections(dataset) {
+  if (dataset === "owner" && currentRole !== "Owner") {
+    toast("Hanya Owner yang dapat mengekspor ringkasan Owner.");
+    return [];
+  }
   if (dataset !== "owner" && dataset !== "all" && !canViewDataset(dataset)) {
     toast("Role ini tidak punya akses export data tersebut.");
     return [];
@@ -4563,7 +4609,10 @@ function formatExportValue(key, value) {
 }
 
 function csvCell(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+  let text = String(value ?? "");
+  // Quoting alone does not stop spreadsheet software from evaluating formulas.
+  if (typeof value === "string" && /^[\s\uFEFF]*[=+@-]/u.test(text)) text = "'" + text;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 async function syncToGoogleSheets(options = {}) {
@@ -4878,19 +4927,24 @@ async function fetchFromGoogleSheets(options = {}) {
   const fetchStartedAt = performance.now();
   const sessionGeneration = Number.isFinite(options.sessionGeneration) ? options.sessionGeneration : datasetSessionGeneration;
   try {
-    const url = new URL(backend.url);
-    url.searchParams.set("action", sessionToken ? "secureFetch" : "fetch");
-    if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) url.searchParams.set("token", backend.token);
-    if (sessionToken) url.searchParams.set("sessionToken", sessionToken);
     const requestedDatasets = [...new Set((options.datasets || []).filter(dataset => DATASET_KEYS.includes(dataset)))];
-    if (requestedDatasets.length) url.searchParams.set("datasets", requestedDatasets.join(","));
-    if (options.includeSettings) url.searchParams.set("includeSettings", "true");
-    url.searchParams.set("_", Date.now().toString());
-
-    const result = await requestBackendJson(url.toString(), { cache: "no-store" }, {
+    const payload = {
+      action: sessionToken ? "secureFetch" : "fetch",
+      sessionToken,
+      datasets: requestedDatasets,
+      includeSettings: options.includeSettings ? "true" : "false"
+    };
+    if (!CONFIG.BACKEND_AUTH_REQUIRED && backend.token) payload.token = backend.token;
+    // Keep session credentials out of URLs, browser history and cache keys.
+    const result = await requestBackendJson(backend.url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }, {
       context: "Memuat data",
-      timeoutMs: 60000,
-      retries: 1,
+      timeoutMs: 45000,
+      retries: 0,
       retryPolicy: "read-only"
     });
     if (!result.ok) throw new Error(result.error || "Fetch gagal.");
@@ -4932,6 +4986,20 @@ async function fetchFromGoogleSheets(options = {}) {
     return fetchedData;
   } catch (error) {
     autoSyncPaused = false;
+    if (/^AUTH_(REQUIRED|INVALID|REVOKED|EXPIRED)$/.test(String(error.message || "")) &&
+        sessionGeneration === datasetSessionGeneration && getBackendSessionToken() === sessionToken) {
+      await handleLogout();
+      toast("Sesi tidak lagi valid. Silakan login kembali.");
+      return null;
+    }
+    if (sessionGeneration === datasetSessionGeneration) {
+      (options.datasets || []).forEach(dataset => {
+        const previous = datasetLoadState.get(dataset) || {};
+        datasetLoadState.set(dataset, { ...previous, loading: false, error: error.message || "Pembacaan gagal." });
+      });
+      setSyncStatus({ lastError: error.message || "Pembacaan gagal.", lastFetchFailedAt: new Date().toISOString() });
+      renderAll();
+    }
     if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
   }
@@ -5139,9 +5207,14 @@ function label(key, dataset = "") {
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, x => x.toUpperCase());
 }
 function mediaLinks(value) {
-  const links = String(value || "").split(/\n|,\s*/).map(x => x.trim()).filter(Boolean);
+  const links = String(value || "").split(/\n|,\s*/).map(x => x.trim()).filter(url => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+    } catch { return false; }
+  });
   if (!links.length) return "-";
-  return links.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Media ${index + 1}</a>`).join("<br>");
+  return links.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Media ${index + 1}</a>`).join("<br>");
 }
 function badgeClass(value) { return String(value).toLowerCase().replace(/\s+/g, "-"); }
 function sectionLabel(section) {
