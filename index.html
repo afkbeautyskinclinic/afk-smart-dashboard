@@ -915,7 +915,7 @@ const PAGE_DATASET_MAP = {
   settings: ["inventory"]
 };
 const EDITABLE_REPORT_FIELDS = {
-  manager: ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"],
+  manager: ["date","managerName","annualBudget","monthlyBudget","monthlyTarget","verifiedRevenue","outstandingBalance","monthlyProfitEstimate","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"],
   managerMarketingDaily: ["date","managerName","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","status","ownerNote"],
   patientCommand: ["date","patientName","caseType","sourceData","status","pic","targetDate","progress","followUpResult","urgency","ownerNote"],
   managerDecisionLog: ["date","managerName","decisionType","decision","dataBasis","assignedTo","deadline","expectedImpact","status","result","ownerNote"],
@@ -928,7 +928,8 @@ const EDITABLE_REPORT_FIELDS = {
   inventory: ["date","userName","activityReport","dailyOmzet","dailyExpense","id","name","category","unit","supplier","initial","inQty","outQty","pharmacyItemName","pharmacyQty","minimum","expired","performanceNote","mediaLinks","bottleneck","ownerNote"]
 };
 const NUMERIC_REPORT_FIELDS = new Set(["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","reach","impressions","ctr","cpc","clicks","whatsappChats","cpr","frequency","leads","qualified","booking","showUp","treatment","roas","views","likes","comments","shares","saves","upsales","initial","inQty","outQty","pharmacyQty","minimum"]);
-const MONEY_REPORT_FIELDS = new Set(["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"]);
+const OPTIONAL_FINANCE_FIELDS = new Set(["monthlyTarget", "verifiedRevenue", "outstandingBalance", "monthlyProfitEstimate"]);
+const MONEY_REPORT_FIELDS = new Set(["annualBudget","monthlyBudget","monthlyTarget","verifiedRevenue","outstandingBalance","monthlyProfitEstimate","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"]);
 const DATE_REPORT_FIELDS = new Set(["date","followUp","publishDate","expired","targetDate","deadline"]);
 const TEXTAREA_REPORT_FIELDS = new Set(["address","note","activityReport","performanceNote","bottleneck","ownerNote","hook","cta","asset","adSetSetting","products","productsTools","aftercare","rebooking","complaint","mediaLinks","medicineGiven","voiceOfPatient","upSellingCrossSelling","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","progress","followUpResult","decision","dataBasis","expectedImpact","result","reason","supportingData","requestedDecision","ownerResponse"]);
 const INTERNAL_FIELDS = new Set(["__index", "__readonly", "_syncId", "_createdAt", "_updatedAt"]);
@@ -2444,8 +2445,8 @@ function renderPageContent(pageId) {
 function renderShell() {
   const k = getKpis();
   document.getElementById("heroRevenue").textContent = moneyOrMissing(k.monthlyTarget, "Belum ada target");
-  document.getElementById("heroRoas").textContent = compactMoney(k.monthlyRevenue);
-  document.getElementById("heroLeads").textContent = compactMoney(k.todayRevenue);
+  document.getElementById("heroRoas").textContent = financeMoney(k.monthlyRevenue);
+  document.getElementById("heroLeads").textContent = financeMoney(k.todayRevenue);
 }
 function renderActivePage() {
   if (!canAccessPage(activePage)) activePage = rolePage(currentRole);
@@ -2468,7 +2469,7 @@ function renderOwner() {
     ${renderOwnerControlTower(k, { tier1Ready, operationalReady, controlReady })}
     ${sectionHead("Executive Overview", "Ringkasan performa klinik dari seluruh divisi.", exportActions("owner"))}
     <div class="kpi-grid">
-      ${kpi("Revenue", tier1Ready ? compactMoney(k.revenue) : ownerPendingLabel())}
+      ${kpi("Revenue", tier1Ready ? financeMoney(k.revenue) : ownerPendingLabel())}
       ${kpi("Target Achievement", tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
       ${kpi("Total Leads", tier1Ready ? k.totalLeads : ownerPendingLabel())}
       ${kpi("Qualified Leads", tier1Ready ? k.qualified : ownerPendingLabel())}
@@ -2480,14 +2481,14 @@ function renderOwner() {
       ${kpi("VIP", tier1Ready ? k.vip : ownerPendingLabel())}
       ${kpi("Referral", tier1Ready ? k.referral : ownerPendingLabel())}
       ${kpi("Ad Spend", tier1Ready ? compactMoney(k.adSpend) : ownerPendingLabel())}
-      ${kpi("ROAS", tier1Ready ? `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` : ownerPendingLabel())}
+      ${kpi("ROAS Atribusi Iklan", tier1Ready ? `${safeDiv(k.attributedRevenue, k.adSpend).toFixed(1)}x` : ownerPendingLabel())}
       ${kpi("Top Campaign", tier1Ready ? topBy(state.marketing, "revenue", "name") : ownerPendingLabel())}
       ${kpi("Top Treatment", operationalReady ? topText(state.medis, "treatmentName") : ownerPendingLabel())}
       ${kpi("Stock Critical", operationalReady ? k.stockCritical : ownerPendingLabel())}
     </div>
     ${operationalReady ? renderIntegratedOwnerDashboard() : ownerLoadingSection("Integrated Owner Dashboard AFK", "Memuat rekonsiliasi operasional dan alert lintas divisi...")}<div class="two-col">
       ${chartCard("Funnel Klinik", "funnelChart")}
-      ${chartCard("Revenue Mingguan", "revenueChart")}
+      ${chartCard("Omzet Terverifikasi Bulan Berjalan", "revenueChart")}
     </div>
     <div class="two-col">
       ${chartCard("Leads Berdasarkan Source", "sourceChart")}
@@ -2504,19 +2505,19 @@ function renderOwnerControlTower(k, readiness = {}) {
   const problems = readiness.controlReady ? getOwnerTopProblems() : [];
   const decisions = readiness.controlReady ? getOwnerTopDecisions() : [];
   return `<section class="integrated-owner owner-control-tower">
-    ${sectionHead("Owner Control Tower", "Ringkasan bisnis bertingkat dari operasional, manager, hingga Owner agar keputusan utama dapat dilihat dalam satu halaman.")}
+    ${sectionHead("Owner Control Tower", `Ringkasan kedua manager • ${businessToday()} (Asia/Jakarta). Booking, show up, dan cash in: bulan berjalan. Laporan Finance terakhir: ${k.lastFinanceDate || "belum ada"}; omzet terverifikasi: ${k.revenueDays} hari. Forecast adalah proyeksi linier, bukan jaminan.`)}
     <div class="kpi-grid">
-      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? compactMoney(k.todayRevenue) : ownerPendingLabel())}
-      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? compactMoney(k.monthlyRevenue) : ownerPendingLabel())}
+      ${kpi("Omzet Hari Ini", readiness.tier1Ready ? financeMoney(k.todayRevenue) : ownerPendingLabel())}
+      ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? financeMoney(k.monthlyRevenue) : ownerPendingLabel())}
       ${kpi("Progress Target", readiness.tier1Ready ? targetAchievementLabel(k) : ownerPendingLabel())}
-      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? compactMoney(k.forecastRevenue) : ownerPendingLabel())}
-      ${kpi("Estimasi Profit", readiness.operationalReady ? compactMoney(k.estimatedProfit) : ownerPendingLabel())}
-      ${kpi("Cash In", readiness.tier1Ready ? compactMoney(k.cashIn) : ownerPendingLabel())}
-      ${kpi("Outstanding Payment", readiness.tier1Ready ? compactMoney(k.outstandingPayment) : ownerPendingLabel())}
+      ${kpi("Forecast Akhir Bulan", readiness.tier1Ready ? financeMoney(k.forecastRevenue) : ownerPendingLabel())}
+      ${kpi("Estimasi Profit", readiness.operationalReady ? financeMoney(k.estimatedProfit) : ownerPendingLabel())}
+      ${kpi("Cash In", readiness.tier1Ready ? financeMoney(k.cashIn) : ownerPendingLabel())}
+      ${kpi("Outstanding Payment", readiness.tier1Ready ? financeMoney(k.outstandingPayment) : ownerPendingLabel())}
       ${kpi("Jumlah Pasien Hari Ini", readiness.operationalReady ? k.todayPatients : ownerPendingLabel())}
       ${kpi("Booking", readiness.tier1Ready ? k.booking : ownerPendingLabel())}
       ${kpi("Show Up", readiness.tier1Ready ? k.showUp : ownerPendingLabel())}
-      ${kpi("Action Priority", readiness.controlReady ? problems.length : ownerPendingLabel())}
+      ${kpi("Action Priority", readiness.controlReady ? k.actionPriority : ownerPendingLabel())}
       ${kpi("Alert Bisnis", readiness.operationalReady ? k.businessAlerts : ownerPendingLabel())}
     </div>
     <div class="two-col">
@@ -2588,7 +2589,7 @@ function renderManager() {
   document.getElementById("managerPage").innerHTML = `
     ${sectionHead("Manager Finance & Operational", "Control dashboard untuk cash flow perusahaan, anggaran, laba rugi, pembayaran, SOP pelayanan, stok, jadwal tim, dan kendala pasien.")}
     <div class="kpi-grid">
-      ${kpi("Cash In", compactMoney(k.cashIn))}
+      ${kpi("Cash In", financeMoney(k.cashIn))}
       ${kpi("Cash Out", compactMoney(k.cashOut))}
       ${kpi("Saldo Kas", compactMoney(k.cashBalance))}
       ${kpi("Laba / Rugi", compactMoney(k.profitLoss))}
@@ -2596,9 +2597,11 @@ function renderManager() {
       ${kpi("Outstanding Operasional", k.openOperationalIssues)}
       ${kpi("Selisih Barang Apotek", getPharmacyReconciliationRows().filter(row => row.status !== "Selaras").length)}
     </div>
+    ${renderManagerRollup("finance")}
     ${managerForm()}
+    <p class="muted">Target berlaku untuk bulan pada Tanggal laporan. Omzet terverifikasi adalah total satu hari; revisi terakhir per tanggal digunakan. Outstanding dan estimasi profit adalah saldo/kumulatif terbaru, tidak dijumlahkan. Kosongkan bila belum diverifikasi; isi 0 bila sudah diverifikasi nihil.</p>
     ${tableCard("Rekonsiliasi Barang Apotek", "pharmacyReconciliation", getPharmacyReconciliationRows(), ["pharmacyItemName","inventoryQty","medicalQty","gap","status","action"])}
-    ${tableCard("Laporan Manager Finance & Operational", "manager", rows, ["date","managerName","annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"])}
+    ${tableCard("Laporan Manager Finance & Operational", "manager", rows, ["date","managerName","annualBudget","monthlyBudget","monthlyTarget","verifiedRevenue","outstandingBalance","monthlyProfitEstimate","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss","cashFlowNote","sopStatus","stockSkincareStatus","stockMedicineStatus","medicalToolStatus","doctorScheduleStatus","therapistScheduleStatus","staffScheduleStatus","patientComplaint","operationalIssue","actionTaken","followUpPlan","priority","status","mediaLinks","ownerNote"])}
     ${ownerEscalationForm("financeOwnerEscalationForm", "Nama Manager Finance & Operational")}
     ${tableCard("Owner Escalation", "ownerEscalation", escalationRows, ["date","managerName","topic","reason","supportingData","urgency","requestedDecision","status","ownerResponse","followUp","ownerNote"])}
   `;
@@ -2612,6 +2615,7 @@ function managerForm() {
     input("managerName", "Nama Manager"),
     input("annualBudget", "Anggaran Tahunan", "number"),
     input("monthlyBudget", "Anggaran Bulanan", "number"),
+    input("monthlyTarget", "Target Omzet Bulan Ini", "number"),
     input("cashInPatient", "Cash In - Pembayaran Pasien", "number"),
     input("cashInOther", "Cash In - Sumber Lain", "number"),
     input("cashOutVendor", "Cash Out - Pembayaran Vendor", "number"),
@@ -2620,6 +2624,9 @@ function managerForm() {
     input("cashOutOperational", "Cash Out - Biaya Operasional", "number"),
     input("cashOutOther", "Cash Out - Lain-lain", "number"),
     input("cashBalance", "Saldo Kas Akhir", "number"),
+    input("verifiedRevenue", "Omzet Terverifikasi Tanggal Laporan (bukan cash in)", "number"),
+    input("outstandingBalance", "Saldo Outstanding Payment per Tanggal Laporan", "number"),
+    input("monthlyProfitEstimate", "Estimasi Profit Bulan Berjalan (kumulatif)", "number"),
     input("profitLoss", "Laba / Rugi Periode Ini", "number"),
     textarea("cashFlowNote", "Catatan Laba Rugi / Arus Kas"),
     select("sopStatus", "Status SOP Pelayanan", ["Sesuai SOP", "Perlu Perbaikan", "Tidak Sesuai"]),
@@ -2640,7 +2647,8 @@ function managerForm() {
 }
 
 async function addManager(data, fileFields = {}) {
-  ["annualBudget","monthlyBudget","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss"].forEach(key => data[key] = num(data[key]));
+  ["annualBudget","monthlyBudget","monthlyTarget","verifiedRevenue","outstandingBalance","monthlyProfitEstimate","cashInPatient","cashInOther","cashOutVendor","cashOutSalary","cashOutDoctorFee","cashOutOperational","cashOutOther","cashBalance","profitLoss"].forEach(key => data[key] = OPTIONAL_FINANCE_FIELDS.has(key) && (data[key] === "" || data[key] == null) ? "" : num(data[key]));
+  if (["monthlyTarget", "verifiedRevenue", "outstandingBalance"].some(key => num(data[key]) < 0)) throw new Error("Target, omzet, dan outstanding tidak boleh negatif.");
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "manager", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
   state.manager.unshift(row);
@@ -2677,6 +2685,7 @@ function renderManagerMarketing() {
         ${managerMarketingMonitoringRows(monitoring).map(row => `<tr><td>${escapeHtml(row.source)}</td><td>${formatNumber(row.leads)}</td><td>${formatNumber(row.booking)}</td><td>${formatNumber(row.showUp)}</td><td>${formatNumber(row.treatment)}</td><td>${money(row.revenue)}</td><td>${escapeHtml(row.note)}</td></tr>`).join("")}
       </tbody></table></div>
     </div>
+    ${renderManagerRollup("marketing")}
     ${managerMarketingDailyForm()}
     ${tableCard("Daily Manager Report", "managerMarketingDaily", dailyRows, ["date","managerName","performanceSummary","targetVsActual","mainIssue","rootCause","decisionTaken","ongoingFollowUp","risk","ownerEscalationNeeded","status","ownerNote"])}
     ${patientCommandForm()}
@@ -2797,10 +2806,10 @@ function getManagerMarketingMonitoring() {
     dmLeads: marketing.leads,
     crmAds: crmAds.length,
     crmLoyal: crmLoyal.length,
-    booking: state.crm.filter(row => ["Booking", "Show Up", "Treatment"].includes(row.responseLead)).length + marketing.booking,
-    showUp: state.crm.filter(row => ["Show Up", "Treatment"].includes(row.responseLead)).length + marketing.showUp,
-    treatment: state.crm.filter(row => row.responseLead === "Treatment").length + marketing.treatment,
-    revenue: sum(state.crm, "revenue") + sum(state.marketing, "revenue"),
+    booking: getMarketingSummary().booking,
+    showUp: getMarketingSummary().showUp,
+    treatment: getMarketingSummary().treatment,
+    revenue: sum(periodRows(state.crm), "revenue"),
     roas: safeDiv(sum(state.marketing, "revenue"), marketing.spend),
     creativePosted: state.content.filter(row => row.status === "Posted").length,
     crmAdsRevenue: sum(crmAds, "revenue"),
@@ -3655,6 +3664,7 @@ function tableCell(dataset, row, col) {
   }
   if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
+  if (OPTIONAL_FINANCE_FIELDS.has(col)) return `<td>${value === "" || value == null ? "Belum dilaporkan" : money(num(value))}</td>`;
   if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
   if (["ctr"].includes(col)) return `<td>${pct(num(value))}</td>`;
   if (["roas"].includes(col)) return `<td>${num(value).toFixed(1)}x</td>`;
@@ -3705,7 +3715,7 @@ function saveOwnerNoteToLatestReport(dataset, data) {
 function formValues(form) {
   const data = {};
   new FormData(form).forEach((value, key) => {
-    if (!(value instanceof File)) data[key] = MONEY_REPORT_FIELDS.has(key) ? parseMoneyInput(value) : value;
+    if (!(value instanceof File)) data[key] = OPTIONAL_FINANCE_FIELDS.has(key) && String(value).trim() === "" ? "" : MONEY_REPORT_FIELDS.has(key) ? parseMoneyInput(value) : value;
   });
   return data;
 }
@@ -3869,6 +3879,8 @@ function bindMoneyInputs(root = document) {
 }
 
 function normalizeEditValue(field, value) {
+  if (OPTIONAL_FINANCE_FIELDS.has(field) && String(value ?? "").trim() === "") return "";
+  if (["monthlyTarget", "verifiedRevenue", "outstandingBalance"].includes(field) && parseMoneyInput(value) < 0) throw new Error("Nilai tidak boleh negatif.");
   if (field === "ownerNote") return ownerNoteValue(value);
   if (MONEY_REPORT_FIELDS.has(field)) return parseMoneyInput(value);
   if (NUMERIC_REPORT_FIELDS.has(field)) return num(value);
@@ -3914,7 +3926,8 @@ function renderCharts() {
     const kpis = getKpis();
     if (hasLoadedDatasets(OWNER_TIER_1_DATASETS)) {
       const sourceRows = getLeadSourceRows();
-      makeChart("revenueChart", "line", state.crm.map(x => x.date), state.crm.map(x => x.revenue), true);
+      const dailyRevenue = dailyFinanceRows(periodRows(state.manager), "verifiedRevenue");
+      makeChart("revenueChart", "line", dailyRevenue.map(x => x.date), dailyRevenue.map(x => x.value), true);
       makeChart("sourceChart", "doughnut", sourceRows.map(row => row.source), sourceRows.map(row => row.total));
     }
     if (hasLoadedDatasets([...OWNER_TIER_1_DATASETS, ...OWNER_TIER_2_OPERATIONAL_DATASETS])) {
@@ -4035,57 +4048,116 @@ function select(name, text, options) {
   return `<label>${text}<select name="${name}">${options.map(x => `<option>${escapeHtml(x)}</option>`).join("")}</select></label>`;
 }
 
-function getKpis() {
-  const totalLeads = state.crm.length + sum(state.marketing, "leads") + sum(state.content, "leads");
-  const qualified = state.crm.filter(x => ["Konsultasi", "Booking", "Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "qualified");
-  const booking = state.crm.filter(x => ["Booking", "Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "booking");
-  const showUp = state.crm.filter(x => ["Show Up", "Treatment"].includes(x.responseLead)).length + sum(state.marketing, "showUp");
-  const treatmentCount = state.crm.filter(x => x.responseLead === "Treatment").length + sum(state.marketing, "treatment") + state.doctor.filter(x => isTreatmentDone(x.status)).length + state.medis.filter(x => isTreatmentDone(x.status)).length;
-  const managerCashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther");
-  const managerCashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther");
-  const divisionOmzet = sum(state.marketing, "dailyOmzet") + sum(state.content, "dailyOmzet") + sum(state.crm, "dailyOmzet") + sum(state.doctor, "dailyOmzet") + sum(state.medis, "dailyOmzet") + sum(state.inventory, "dailyOmzet");
-  const divisionExpense = sum(state.marketing, "dailyExpense") + sum(state.content, "dailyExpense") + sum(state.crm, "dailyExpense") + sum(state.doctor, "dailyExpense") + sum(state.medis, "dailyExpense") + sum(state.inventory, "dailyExpense");
-  const revenue = sum(state.crm, "revenue") + sum(state.marketing, "revenue") + sum(state.medis, "upsales") + divisionOmzet + (managerCashIn || sum(state.manager, "dailyRevenue"));
-  const adSpend = sum(state.marketing, "spend") + sum(state.manager, "adSpend");
-  const allRows = [...state.manager, ...state.marketing, ...state.crm, ...state.doctor, ...state.medis, ...state.inventory];
-  const latestDate = latestIsoDate(allRows) || new Date().toISOString().slice(0, 10);
-  const monthPrefix = latestDate.slice(0, 7);
-  const todayRevenue = revenueOnDate(latestDate);
-  const monthlyRevenue = revenueInMonth(monthPrefix);
-  const monthlyTarget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget");
-  const forecastRevenue = forecastMonth(monthlyRevenue, latestDate);
-  const expenses = (managerCashOut || (adSpend + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"))) + divisionExpense;
-  const todayPatients = uniquePatientCount(latestDate);
-  const stockCritical = state.inventory.filter(x => stockStatus(x) !== "Aman").length;
-  const repeat = state.crm.filter(x => /data base|database|repeat/i.test(`${x.status} ${x.category} ${x.responseLead}`)).length;
-  const rebooking = state.medis.filter(x => x.rebooking).length + state.doctor.filter(x => x.rebooking).length;
-  const vip = state.crm.filter(x => /vip/i.test(`${x.category} ${x.voiceOfPatient}`) || num(x.revenue) >= 10000000).length;
-  const referral = state.crm.filter(x => /referral/i.test(x.status)).length;
-  const integrated = getIntegratedOwnerMetrics();
-  const businessAlerts = integrated.lateInput + integrated.mismatch + integrated.brokenJourney + integrated.redFlag + integrated.aftercareMissing + stockCritical + state.ownerEscalation.filter(x => x.status === "Menunggu Persetujuan").length;
+// Manager summaries are the single source for Owner headline indicators.
+function businessToday(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const value = name => parts.find(part => part.type === name).value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+function periodRows(rows, today = businessToday()) {
+  return rows.filter(row => String(row.date || "").slice(0, 7) === today.slice(0, 7) && row.date <= today);
+}
+function hasReportedNumber(row, key) {
+  return row && row[key] !== "" && row[key] != null && Number.isFinite(Number(row[key]));
+}
+function latestReportedNumber(rows, key) {
+  const matches = rows.filter(row => hasReportedNumber(row, key)).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b._updatedAt || b._createdAt || "").localeCompare(String(a._updatedAt || a._createdAt || "")));
+  return matches.length ? Number(matches[0][key]) : null;
+}
+function dailyFinanceRows(rows, key) {
+  const dates = [...new Set(rows.map(row => row.date))].sort();
+  return dates.map(date => ({date, value: latestReportedNumber(rows.filter(row => row.date === date), key)})).filter(row => row.value !== null);
+}
+function reportedDailyTotal(rows, key) {
+  const daily = dailyFinanceRows(rows, key);
+  return daily.length ? daily.reduce((total, row) => total + row.value, 0) : null;
+}
+function isOpenManagementItem(row) {
+  return !/^(selesai|done|closed|ditutup|ditolak|disetujui|approved|rejected)$/i.test(String(row.status || "").trim());
+}
+function rankManagementItems(items) {
+  const rank = value => /critical|kritis|urgent|mendesak/i.test(value) ? 3 : /high|tinggi/i.test(value) ? 2 : /medium|sedang/i.test(value) ? 1 : 0;
+  return items.sort((a,b) => rank(b.priority || b.urgency || "") - rank(a.priority || a.urgency || "") || String(b.date || "").localeCompare(String(a.date || "")));
+}
+function getFinanceSummary(today = businessToday()) {
+  const rows = periodRows(state.manager, today);
+  const operations = [...state.doctor, ...state.medis].filter(row => row.date === today);
+  // Link explicit shared booking/patient identifiers; never sum division patient counts.
+  const groups = [];
+  let unidentified = 0;
+  operations.forEach(row => {
+    const keys = [row.patientId && `patient:${String(row.patientId).trim().toLowerCase()}`, row.patientName && `name:${String(row.patientName).trim().toLowerCase()}`, row.bookingId && `booking:${String(row.bookingId).trim().toLowerCase()}`].filter(Boolean);
+    if (!keys.length) { unidentified++; return; }
+    const matches = groups.filter(group => keys.some(key => group.has(key)));
+    const merged = new Set(keys);
+    matches.forEach(group => { group.forEach(key => merged.add(key)); groups.splice(groups.indexOf(group),1); });
+    groups.push(merged);
+  });
+  const problems = state.manager.filter(isOpenManagementItem).filter(row => row.date <= today && (row.operationalIssue || row.patientComplaint)).map(row => ({...row, title: row.operationalIssue || row.patientComplaint, detail: row.followUpPlan || row.actionTaken || row.patientComplaint, pic: row.managerName}));
+  ["doctor", "medis", "inventory"].forEach(dataset => periodRows(state[dataset], today).filter(isOpenManagementItem).forEach(row => {
+    const issue = row.complaint || row.bottleneck;
+    if (issue) problems.push({date:row.date, priority:row.priority || "Medium", title:`${dataset === "doctor" ? "Dokter" : dataset === "medis" ? "Tim Medis" : "Inventory"}: kendala operasional`, detail:issue, pic:row.doctorName || row.nurseBeautician || row.userName || "Manager Finance & Operational"});
+  }));
+  const monthlyRevenue = reportedDailyTotal(rows, "verifiedRevenue");
   return {
-    totalLeads,
-    qualified,
-    booking,
-    showUp,
-    treatment: treatmentCount,
-    revenue,
-    adSpend,
-    monthlyTarget,
+    monthlyTarget: latestReportedNumber(rows, "monthlyTarget"),
+    todayRevenue: latestReportedNumber(rows.filter(row => row.date === today), "verifiedRevenue"),
     monthlyRevenue,
-    todayRevenue,
-    forecastRevenue,
-    estimatedProfit: monthlyRevenue - expenses,
-    cashIn: monthlyRevenue,
-    outstandingPayment: Math.max(0, sum(state.manager, "totalRevenue") - monthlyRevenue),
-    todayPatients,
-    repeat,
-    rebooking,
-    vip,
-    referral,
-    stockCritical,
-    businessAlerts
+    forecastRevenue: monthlyRevenue === null ? null : forecastMonth(monthlyRevenue, today),
+    cashIn: rows.length ? sum(rows, "cashInPatient") + sum(rows, "cashInOther") : null,
+    outstandingPayment: latestReportedNumber(rows, "outstandingBalance"),
+    estimatedProfit: latestReportedNumber(rows, "monthlyProfitEstimate"),
+    todayPatients: operations.length ? (unidentified ? `${groups.length} teridentifikasi; ${unidentified} laporan tanpa identitas` : groups.length) : "Belum dilaporkan",
+    stockCritical: state.inventory.filter(row => stockStatus(row) !== "Aman").length,
+    problems,
+    doctorReports: periodRows(state.doctor, today).length,
+    medicalReports: periodRows(state.medis, today).length,
+    inventoryReports: periodRows(state.inventory, today).length,
+    lastFinanceDate: latestIsoDate(rows),
+    revenueDays: dailyFinanceRows(rows, "verifiedRevenue").length
   };
+}
+function getMarketingSummary(today = businessToday()) {
+  const crm = periodRows(state.crm, today), ads = periodRows(state.marketing, today), creative = periodRows(state.content, today);
+  // CRM is the canonical funnel; campaign and creative figures are attribution, not additive patients.
+  const unique = new Map();
+  crm.forEach((row, index) => { const key = row.id || row._syncId || `row-${index}`; const previous = unique.get(key); if (!previous || String(row.date) > String(previous.date)) unique.set(key, row); });
+  const funnel = [...unique.values()];
+  const problems = state.managerMarketingDaily.filter(isOpenManagementItem).filter(row => row.date <= today && (row.mainIssue || row.risk)).map(row => ({...row, title: row.mainIssue || "Risiko Marketing", detail: row.risk || row.rootCause || row.ongoingFollowUp, pic: row.managerName}));
+  ["marketing", "content", "crm"].forEach(dataset => periodRows(state[dataset], today).filter(isOpenManagementItem).forEach(row => {
+    if (row.bottleneck) problems.push({date:row.date, priority:row.priority || "Medium", title:`${dataset === "marketing" ? "Digital Marketing" : dataset === "content" ? "Creative Performance" : "CRM"}: bottleneck`, detail:row.bottleneck, pic:row.userName || "Manager Marketing"});
+  }));
+  return {
+    totalLeads: funnel.length,
+    qualified: funnel.filter(row => ["Konsultasi","Booking","Show Up","Treatment"].includes(row.responseLead)).length,
+    booking: funnel.filter(row => ["Booking","Show Up","Treatment"].includes(row.responseLead)).length,
+    showUp: funnel.filter(row => ["Show Up","Treatment"].includes(row.responseLead)).length,
+    treatment: funnel.filter(row => row.responseLead === "Treatment").length,
+    adSpend: sum(ads, "spend"), attributedRevenue: sum(ads, "revenue"),
+    creativePosted: creative.filter(row => row.status === "Posted").length,
+    creativeLeads: sum(creative, "leads"), dmLeads: sum(ads, "leads"),
+    repeat: funnel.filter(row => /repeat|database|data base/i.test(`${row.status} ${row.category}`)).length,
+    vip: funnel.filter(row => /vip/i.test(row.category || "")).length,
+    referral: funnel.filter(row => /referral/i.test(row.status || "")).length,
+    problems
+  };
+}
+function getKpis() {
+  const finance = getFinanceSummary(), marketing = getMarketingSummary();
+  const problems = [...finance.problems, ...marketing.problems];
+  return { ...marketing, ...finance, revenue: finance.monthlyRevenue,
+    rebooking: periodRows(state.medis).filter(row => row.rebooking).length,
+    businessAlerts: finance.problems.length + marketing.problems.length + finance.stockCritical + getOwnerTopDecisions().length,
+    actionPriority: problems.length
+  };
+}
+function financeMoney(value) { return value === null || value === undefined ? "Belum dilaporkan" : compactMoney(value); }
+function renderManagerRollup(kind) {
+  const finance = kind === "finance", k = finance ? getFinanceSummary() : getMarketingSummary();
+  const title = finance ? "Ringkasan Finance & Operational untuk Owner" : "Ringkasan Manager Marketing untuk Owner";
+  const source = finance ? "Sumber operasional: Dokter, Tim Medis, Inventory. Keuangan: laporan Finance terverifikasi." : "Sumber: Digital Marketing & Ads, Creative Performance, CRM. Booking dan show up memakai CRM agar tidak dijumlahkan ulang dengan atribusi iklan.";
+  const cards = finance ? [kpi("Omzet Bulan Berjalan", financeMoney(k.monthlyRevenue)), kpi("Target Omzet Bulan Ini", moneyOrMissing(k.monthlyTarget, "Belum ada target")), kpi("Cash In Bulan Berjalan", financeMoney(k.cashIn)), kpi("Pasien Hari Ini", k.todayPatients), kpi("Laporan Dokter Bulan Ini", k.doctorReports), kpi("Laporan Tim Medis Bulan Ini", k.medicalReports), kpi("Laporan Inventory Bulan Ini", k.inventoryReports), kpi("Stok Kritis", k.stockCritical)] : [kpi("Leads CRM Bulan Ini", k.totalLeads), kpi("Booking Bulan Ini", k.booking), kpi("Show Up Bulan Ini", k.showUp), kpi("Ad Spend Bulan Ini", compactMoney(k.adSpend)), kpi("Konten Posted Bulan Ini", k.creativePosted), kpi("Leads Atribusi Creative", k.creativeLeads)];
+  return `<section class="integrated-owner">${sectionHead(title, source)}<div class="kpi-grid">${cards.join("")}</div></section>`;
 }
 
 function latestIsoDate(rows) {
@@ -4098,18 +4170,10 @@ function latestNumber(rows, key) {
 }
 
 function revenueOnDate(date) {
-  const managerRows = state.manager.filter(x => x.date === date);
-  const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
-  const divisionOmzet = sum(state.marketing.filter(x => x.date === date), "dailyOmzet") + sum(state.content.filter(x => x.date === date), "dailyOmzet") + sum(state.crm.filter(x => x.date === date), "dailyOmzet") + sum(state.doctor.filter(x => x.date === date), "dailyOmzet") + sum(state.medis.filter(x => x.date === date), "dailyOmzet") + sum(state.inventory.filter(x => x.date === date), "dailyOmzet");
-  return sum(state.crm.filter(x => x.date === date), "revenue") + sum(state.marketing.filter(x => x.date === date), "revenue") + sum(state.medis.filter(x => x.date === date), "upsales") + divisionOmzet + (managerCash || sum(managerRows, "dailyRevenue"));
+  return latestReportedNumber(state.manager.filter(row => row.date === date), "verifiedRevenue");
 }
-
 function revenueInMonth(monthPrefix) {
-  const inMonth = row => String(row.date || "").startsWith(monthPrefix);
-  const managerRows = state.manager.filter(inMonth);
-  const managerCash = sum(managerRows, "cashInPatient") + sum(managerRows, "cashInOther");
-  const divisionOmzet = sum(state.marketing.filter(inMonth), "dailyOmzet") + sum(state.content.filter(inMonth), "dailyOmzet") + sum(state.crm.filter(inMonth), "dailyOmzet") + sum(state.doctor.filter(inMonth), "dailyOmzet") + sum(state.medis.filter(inMonth), "dailyOmzet") + sum(state.inventory.filter(inMonth), "dailyOmzet");
-  return sum(state.crm.filter(inMonth), "revenue") + sum(state.marketing.filter(inMonth), "revenue") + sum(state.medis.filter(inMonth), "upsales") + divisionOmzet + (managerCash || sum(managerRows, "dailyRevenue"));
+  return reportedDailyTotal(state.manager.filter(row => String(row.date || "").startsWith(monthPrefix) && row.date <= businessToday()), "verifiedRevenue");
 }
 
 function forecastMonth(value, isoDate) {
@@ -4147,31 +4211,17 @@ function leadSourceValue(source) {
 }
 
 function getOwnerTopProblems() {
-  const items = [];
-  state.managerMarketingDaily.forEach(row => {
-    if (row.mainIssue || row.risk) items.push({ title: row.mainIssue || "Masalah Manager Marketing", detail: row.risk || row.rootCause || row.performanceSummary || "Perlu evaluasi manager.", pic: row.managerName });
-  });
-  state.patientCommand.forEach(row => {
-    if (row.status !== "Selesai") items.push({ title: row.caseType || "Kasus pasien prioritas", detail: `${row.patientName || "Pasien"} - ${row.progress || row.followUpResult || "Belum selesai"}`, pic: row.pic });
-  });
-  [...state.crm, ...state.doctor, ...state.medis].forEach(row => {
-    const issue = row.bottleneck || row.complaint || row.voiceOfPatient;
-    if (issue) items.push({ title: "Bottleneck / Keluhan", detail: issue, pic: row.userName || row.doctorName || row.nurseBeautician || "PIC terkait" });
-  });
-  return items.slice(0, 5);
+  return rankManagementItems([...getFinanceSummary().problems, ...getMarketingSummary().problems]).slice(0, 5);
 }
-
 function getOwnerTopDecisions() {
-  const pending = state.ownerEscalation.map(row => ({ title: row.topic || row.requestedDecision || "Keputusan Owner", detail: `${row.reason || row.supportingData || "Menunggu arahan"} (${row.status || "Open"})`, pic: row.managerName || "Manager" }));
-  const decisions = state.managerDecisionLog.map(row => ({ title: row.decisionType || "Manager Decision", detail: row.decision || row.expectedImpact || "Keputusan tercatat.", pic: row.managerName || row.assignedTo || "Manager" }));
-  return [...pending, ...decisions].slice(0, 5);
+  return rankManagementItems(state.ownerEscalation.filter(row => isOpenManagementItem(row) && row.date <= businessToday()).map(row => ({...row, title: row.topic || row.requestedDecision || "Keputusan Owner", detail: row.requestedDecision || row.reason || row.supportingData || "Menunggu arahan", pic: row.managerName || "Manager"}))).slice(0, 5);
 }
 function getManagerKpis() {
   const cashIn = sum(state.manager, "cashInPatient") + sum(state.manager, "cashInOther") || sum(state.manager, "dailyRevenue");
   const cashOut = sum(state.manager, "cashOutVendor") + sum(state.manager, "cashOutSalary") + sum(state.manager, "cashOutDoctorFee") + sum(state.manager, "cashOutOperational") + sum(state.manager, "cashOutOther") || (sum(state.manager, "adSpend") + sum(state.manager, "otherExpense") + sum(state.manager, "teamBonus"));
   const latestBalance = latestNumber(state.manager, "cashBalance");
   const profitLoss = sum(state.manager, "profitLoss") || (cashIn - cashOut);
-  const monthlyBudget = latestNumber(state.manager, "monthlyBudget") || latestNumber(state.manager, "monthlyTarget");
+  const monthlyBudget = latestReportedNumber(periodRows(state.manager), "monthlyBudget");
   const openOperationalIssues = state.manager.filter(row => (row.operationalIssue || row.patientComplaint) && !["Selesai", "Done"].includes(row.status)).length;
   return { cashIn, cashOut, cashBalance: latestBalance || (cashIn - cashOut), profitLoss, monthlyBudget, openOperationalIssues, dailyRevenue: cashIn, totalRevenue: cashIn, totalExpense: cashOut, teamBonus: sum(state.manager, "teamBonus") };
 }
@@ -4446,7 +4496,7 @@ function ownerDecisionAlert(severity, title, detail, action) {
 
 function countBlankCriticalFields() {
   const required = {
-    manager: ["date","managerName","monthlyBudget","cashInPatient","cashOutOperational","cashBalance"],
+    manager: ["date","managerName","monthlyBudget","monthlyTarget","verifiedRevenue","outstandingBalance","monthlyProfitEstimate","cashInPatient","cashOutOperational","cashBalance"],
     marketing: ["date","userName","leads","booking","showUp","treatment","revenue"],
     content: ["date","userName","title","platform","status"],
     crm: ["date","userName","name","wa","responseLead","followUp"],
@@ -4539,7 +4589,7 @@ function getOwnerExportSections() {
         { metric: "Total Treatment", value: k.treatment },
         { metric: "Revenue", value: money(k.revenue) },
         { metric: "Ad Spend", value: money(k.adSpend) },
-        { metric: "ROAS", value: `${safeDiv(k.revenue, k.adSpend).toFixed(1)}x` },
+        { metric: "ROAS", value: `${safeDiv(k.attributedRevenue, k.adSpend).toFixed(1)}x` },
         { metric: "CPL", value: money(safeDiv(k.adSpend, k.totalLeads)) },
         { metric: "Stock Critical", value: state.inventory.filter(x => stockStatus(x) !== "Aman").length },
         { metric: "Top Campaign", value: topBy(state.marketing, "revenue", "name") },
@@ -5064,7 +5114,7 @@ function money(value) { return new Intl.NumberFormat("id-ID", { style: "currency
 function formatNumber(value) { return new Intl.NumberFormat("id-ID").format(num(value)); }
 function displayKpiValue(value) { return typeof value === "number" ? formatNumber(value) : value; }
 function moneyOrMissing(value, fallbackText) { return num(value) > 0 ? compactMoney(value) : fallbackText; }
-function targetAchievementLabel(k) { return num(k.monthlyTarget) > 0 ? pct(safeDiv(k.monthlyRevenue, k.monthlyTarget)) : "Belum ada target"; }
+function targetAchievementLabel(k) { return num(k.monthlyTarget) > 0 ? (k.monthlyRevenue === null ? "Omzet belum dilaporkan" : pct(safeDiv(k.monthlyRevenue, k.monthlyTarget))) : "Belum ada target"; }
 function compactMoney(value) {
   const amount = num(value);
   const abs = Math.abs(amount);
@@ -5120,7 +5170,10 @@ function label(key, dataset = "") {
     patientTreatmentPrice: "Harga Treatment Pasien",
     dailyTarget: "Target Omzet Harian",
     dailyRevenue: "Revenue Harian",
-    monthlyTarget: "Target Omzet Bulanan",
+    monthlyTarget: "Target Omzet Bulan Ini",
+    verifiedRevenue: "Omzet Terverifikasi Tanggal Laporan",
+    outstandingBalance: "Saldo Outstanding Payment",
+    monthlyProfitEstimate: "Estimasi Profit Bulan Berjalan",
     totalRevenue: "Total Perolehan Omzet",
     teamBonus: "Bonus Capai Target Tim",
     otherExpense: "Pengeluaran Lain-lain",
