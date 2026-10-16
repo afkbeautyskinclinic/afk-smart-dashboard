@@ -2050,7 +2050,7 @@ function bindGlobalEvents() {
 
 function scheduleSearchRender() {
   clearTimeout(searchRenderTimer);
-  searchRenderTimer = setTimeout(renderAll, 1200);
+  searchRenderTimer = setTimeout(() => renderAll({ background: true }), 1200);
 }
 
 function initInstallExperience() {
@@ -2450,7 +2450,8 @@ function escalationNoteLabel() {
   return currentRole === "Owner" ? "Catatan Owner" : "Catatan Manager";
 }
 
-function renderAll() {
+function renderAll(options = {}) {
+  if (options.background && hasActiveReportDraft()) return;
   if (!canAccessPage(activePage)) activePage = rolePage(currentRole);
   applyBrandSettings();
   renderShell();
@@ -3602,7 +3603,7 @@ function formCard(id, title, section, fields) {
       </fieldset>
       <fieldset>
         <div class="form-grid">${ownerFields.join("")}</div>
-        <div class="form-actions"><button class="primary-button">Simpan Catatan Owner</button></div>
+        <div class="form-actions"><button class="primary-button" type="submit">Simpan Catatan Owner</button></div>
       </fieldset>
     </form>`;
   }
@@ -3612,7 +3613,7 @@ function formCard(id, title, section, fields) {
     <div class="section-head"><div><h2>${title}</h2><p>${note}</p></div></div>
     <fieldset ${disabled}>
       <div class="form-grid">${fields.filter(Boolean).join("")}</div>
-      <div class="form-actions"><button class="primary-button">Tambah Data</button></div>
+      <div class="form-actions"><button class="primary-button" type="submit">Tambah Data</button></div>
     </fieldset>
   </form>`;
 }
@@ -3710,12 +3711,37 @@ function tableCell(dataset, row, col) {
   return `<td>${escapeHtml(value)}</td>`;
 }
 
+function hasActiveReportDraft() {
+  const page = NAV.find(item => item.id === activePage);
+  const panel = page && document.getElementById(page.page);
+  const forms = [...(panel?.querySelectorAll("form") || [])];
+  const editForm = document.querySelector("#editReportModal[open] form");
+  if (editForm) forms.push(editForm);
+  return forms.some(form => form.dataset.dirty === "true" || form.dataset.submitting === "true" || form.contains(document.activeElement));
+}
+
+function protectReportForm(form) {
+  if (form.dataset.draftProtected === "true") return;
+  form.dataset.draftProtected = "true";
+  const markDirty = () => { form.dataset.dirty = "true"; };
+  form.addEventListener("input", markDirty);
+  form.addEventListener("change", markDirty);
+  form.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    const tag = event.target.tagName;
+    // Keep multiline notes and intentional keyboard activation of buttons usable.
+    if (tag !== "TEXTAREA" && tag !== "BUTTON" && tag !== "SELECT") event.preventDefault();
+  });
+}
+
 function bindForm(id, handler) {
   const form = document.getElementById(id);
   if (!form) return;
   bindMoneyInputs(form);
+  protectReportForm(form);
   form.addEventListener("submit", async event => {
     event.preventDefault();
+    if (!event.submitter || event.submitter.form !== form) return;
     if (form.dataset.submitting === "true") return;
     const ownerNoteDataset = form.dataset.ownerNoteDataset;
     if (!ownerNoteDataset && form.querySelector("fieldset").disabled) return;
@@ -3855,9 +3881,11 @@ function openEditReport(dataset, index) {
 
   const form = modal.querySelector("#editReportForm");
   bindMoneyInputs(form);
+  protectReportForm(form);
   modal.querySelector("#cancelEditReport").addEventListener("click", () => modal.close());
   form.addEventListener("submit", event => {
     event.preventDefault();
+    if (!event.submitter || event.submitter.form !== form) return;
     const previousRow = { ...state[dataset][index] };
     ensureRecordIdentity(previousRow, dataset);
     const nextRow = { ...state[dataset][index], _syncId: previousRow._syncId, _createdAt: previousRow._createdAt };
@@ -5154,7 +5182,7 @@ async function fetchFromGoogleSheets(options = {}) {
       totalFetchMs,
       backendTiming: result.timing || null
     });
-    renderAll();
+    renderAll({ background: true });
     if (!options.silent) toast("Data berhasil diambil dari Google Sheets.");
     return fetchedData;
   } catch (error) {
@@ -5171,7 +5199,7 @@ async function fetchFromGoogleSheets(options = {}) {
         datasetLoadState.set(dataset, { ...previous, loading: false, error: error.message || "Pembacaan gagal." });
       });
       setSyncStatus({ lastError: error.message || "Pembacaan gagal.", lastFetchFailedAt: new Date().toISOString() });
-      renderAll();
+      renderAll({ background: true });
     }
     if (!options.silent) toast(`Ambil data Google Sheets gagal: ${error.message}`);
     return null;
