@@ -1845,7 +1845,7 @@ function setSyncStatus(nextStatus) {
   const detail = document.getElementById("syncReviewItems");
   if (panel && detail) {
     panel.hidden = !review.length && !unclaimed;
-    detail.innerHTML = (unclaimed ? `<p>${unclaimed} antrean lama belum memiliki identitas akun. Hubungi admin; data tidak dikirim atas nama akun lain.</p>` : "") + review.map(item => `<article><strong>${escapeHtml(item.dataset || "Laporan")}</strong><p>${escapeHtml(item.lastError || "Perlu ditinjau")}</p><small>${escapeHtml(item.clientTime || "")}</small><details><summary>Lihat input tersimpan</summary><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(item.row || {}, null, 2))}</pre></details><p>Bandingkan dengan laporan terbaru sebelum memperbaiki input. Perubahan ini tidak dikirim ulang otomatis.</p></article>`).join("");
+    detail.innerHTML = (unclaimed ? `<p>${unclaimed} antrean lama belum memiliki identitas akun. Hubungi admin; data tidak dikirim atas nama akun lain.</p>` : "") + review.map(item => `<article><strong>${escapeHtml(item.dataset || "Laporan")}</strong><p>${escapeHtml(item.lastError || "Perlu ditinjau")}</p><small>${escapeHtml(formatIndonesianDate(item.clientTime))}</small><details><summary>Lihat input tersimpan</summary><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(item.row || {}, null, 2))}</pre></details><p>Bandingkan dengan laporan terbaru sebelum memperbaiki input. Perubahan ini tidak dikirim ulang otomatis.</p></article>`).join("");
   }
   try { localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify(status)); } catch { /* Status cache is advisory; durable mutations are stored separately. */ }
   const label = document.getElementById("syncQueueStatus");
@@ -2541,7 +2541,7 @@ function renderOwnerControlTower(k, readiness = {}) {
   const problems = readiness.controlReady ? getOwnerTopProblems() : [];
   const decisions = readiness.controlReady ? getOwnerTopDecisions() : [];
   return `<section class="integrated-owner owner-control-tower">
-    ${sectionHead("Owner Control Tower", `Ringkasan kedua manager • ${businessToday()} (Asia/Jakarta). Booking, show up, dan cash in: bulan berjalan. Laporan Finance terakhir: ${k.lastFinanceDate || "belum ada"}; omzet terverifikasi: ${k.revenueDays} hari. Forecast adalah proyeksi linier, bukan jaminan.`)}
+    ${sectionHead("Owner Control Tower", `Ringkasan kedua manager • ${formatIndonesianDate(businessToday())} (WIB). Booking, show up, dan cash in: bulan berjalan. Laporan Finance terakhir: ${formatIndonesianDate(k.lastFinanceDate) || "belum ada"}; omzet terverifikasi: ${k.revenueDays} hari. Forecast adalah proyeksi linier, bukan jaminan.`)}
     <div class="kpi-grid">
       ${kpi("Omzet Hari Ini", readiness.tier1Ready ? financeMoney(k.todayRevenue) : ownerPendingLabel())}
       ${kpi("Omzet Bulan Berjalan", readiness.tier1Ready ? financeMoney(k.monthlyRevenue) : ownerPendingLabel())}
@@ -3693,6 +3693,7 @@ function ownerNoteValue(value) {
 
 function tableCell(dataset, row, col) {
   const value = row[col] ?? "";
+  if (DATE_REPORT_FIELDS.has(col) || ["clientTime", "failedAt", "_createdAt", "_updatedAt"].includes(col)) return `<td>${escapeHtml(formatIndonesianDate(value))}</td>`;
   if (col === "ownerNote") {
     const noteValue = ownerNoteValue(value);
     if (row.__readonly) return `<td class="owner-note-cell"><span class="owner-note-text">${escapeHtml(noteValue)}</span></td>`;
@@ -3908,6 +3909,18 @@ function formatMoneyInput(value) {
 }
 
 function bindMoneyInputs(root = document) {
+  root.querySelectorAll('input[type="date"]').forEach(inputEl => {
+    if (inputEl.dataset.dateBound === "true") return;
+    inputEl.dataset.dateBound = "true";
+    inputEl.lang = "id";
+    const caption = document.createElement("small");
+    caption.setAttribute("aria-live", "polite");
+    inputEl.insertAdjacentElement("afterend", caption);
+    const update = () => { caption.textContent = inputEl.value ? formatIndonesianDate(inputEl.value) : "Pilih tanggal pada kalender"; };
+    inputEl.addEventListener("input", update);
+    inputEl.addEventListener("change", update);
+    update();
+  });
   root.querySelectorAll("[data-money-input]").forEach(inputEl => {
     if (inputEl.dataset.moneyBound === "true") return;
     inputEl.dataset.moneyBound = "true";
@@ -3967,7 +3980,7 @@ function renderCharts() {
     if (hasLoadedDatasets(OWNER_TIER_1_DATASETS)) {
       const sourceRows = getLeadSourceRows();
       const dailyRevenue = dailyFinanceRows(periodRows(state.manager), "verifiedRevenue");
-      makeChart("revenueChart", "line", dailyRevenue.map(x => x.date), dailyRevenue.map(x => x.value), true);
+      makeChart("revenueChart", "line", dailyRevenue.map(x => formatIndonesianDate(x.date, {short:true})), dailyRevenue.map(x => x.value), true);
       makeChart("sourceChart", "doughnut", sourceRows.map(row => row.source), sourceRows.map(row => row.total));
     }
     if (hasLoadedDatasets([...OWNER_TIER_1_DATASETS, ...OWNER_TIER_2_OPERATIONAL_DATASETS])) {
@@ -4090,6 +4103,21 @@ function select(name, text, options) {
 }
 
 // Manager summaries are the single source for Owner headline indicators.
+function formatIndonesianDate(value, options = {}) {
+  if (value === "" || value == null) return "";
+  const raw = value instanceof Date ? value.toISOString() : String(value).trim();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  if (!dateOnly && !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(raw)) return raw;
+  const calendar = new Date(`${raw.slice(0,10)}T00:00:00Z`);
+  if (Number.isNaN(calendar.getTime()) || calendar.toISOString().slice(0,10) !== raw.slice(0,10)) return raw;
+  const date = new Date(dateOnly ? `${raw}T00:00:00+07:00` : raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  const text = new Intl.DateTimeFormat("id-ID", {timeZone:"Asia/Jakarta", ...(options.short ? {} : {weekday:"long"}), day:"numeric", month:options.short ? "short" : "long", year:"numeric"}).format(date);
+  if (dateOnly || options.dateOnly) return text;
+  const time = new Intl.DateTimeFormat("id-ID", {timeZone:"Asia/Jakarta", hour:"2-digit", minute:"2-digit", hourCycle:"h23"}).format(date).replace(":", ".");
+  return `${text}, pukul ${time} WIB`;
+}
+
 function businessToday(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
   const value = name => parts.find(part => part.type === name).value;
@@ -4299,7 +4327,7 @@ function isTreatmentDone(status) {
 function kanban() {
   return ["Idea", "Script", "Design", "Editing", "Revision", "Approved", "Posted"].map(status => `
     <div class="kanban-card"><h3>${status}</h3>
-      ${state.content.filter(x => x.status === status).map(x => `<div class="kanban-item"><strong>${escapeHtml(x.title)}</strong><br><small>${escapeHtml(x.platform)} - ${escapeHtml(x.publishDate)}</small></div>`).join("") || "<small>Kosong</small>"}
+      ${state.content.filter(x => x.status === status).map(x => `<div class="kanban-item"><strong>${escapeHtml(x.title)}</strong><br><small>${escapeHtml(x.platform)} - ${escapeHtml(formatIndonesianDate(x.publishDate))}</small></div>`).join("") || "<small>Kosong</small>"}
     </div>`).join("");
 }
 
@@ -4331,7 +4359,7 @@ function exportPdf(dataset) {
   pdfExportInProgress = true;
 
   const title = `${state.settings.brandName || DEFAULT_DASHBOARD_NAME} - ${exportTitle(dataset)}`;
-  const printedAt = new Date().toLocaleString("id-ID");
+  const printedAt = formatIndonesianDate(new Date());
   const sectionHtml = sections.map(section => exportSectionHtml(section)).join("");
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
@@ -4692,6 +4720,7 @@ function exportTitle(dataset) {
 
 function formatExportValue(key, value) {
   if (value === undefined || value === null || value === "") return "";
+  if (DATE_REPORT_FIELDS.has(key) || ["clientTime", "failedAt", "_createdAt", "_updatedAt"].includes(key)) return formatIndonesianDate(value);
   if (MONEY_REPORT_FIELDS.has(key)) return money(num(value));
   if (key === "ctr") return pct(num(value));
   if (key === "roas") return `${num(value).toFixed(1)}x`;

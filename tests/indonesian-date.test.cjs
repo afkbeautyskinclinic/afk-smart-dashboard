@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');const c={Intl,Date};vm.runInNewContext(html.slice(html.indexOf('function formatIndonesianDate('),html.indexOf('function businessToday(')),c);
+test('calendar date uses Indonesian weekday and month without inventing a time',()=>{assert.equal(c.formatIndonesianDate('2026-10-16'),'Jumat, 16 Oktober 2026');});
+test('timestamps use 24-hour WIB and correctly roll across days',()=>{assert.equal(c.formatIndonesianDate('2026-10-16T06:08:28Z'),'Jumat, 16 Oktober 2026, pukul 13.08 WIB');assert.equal(c.formatIndonesianDate('2026-10-15T18:05:00Z'),'Jumat, 16 Oktober 2026, pukul 01.05 WIB');});
+test('missing and invalid dates are not silently invented or shifted',()=>{assert.equal(c.formatIndonesianDate(''),'');assert.equal(c.formatIndonesianDate(null),'');assert.equal(c.formatIndonesianDate('2026-02-30'),'2026-02-30');assert.equal(c.formatIndonesianDate('Besok'),'Besok');});
