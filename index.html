@@ -2476,6 +2476,7 @@ function renderPageContent(pageId) {
   };
   const render = renderers[pageId] || renderers[rolePage(currentRole)] || renderCrm;
   render();
+  bindExports();
 }
 
 function renderShell() {
@@ -3670,7 +3671,7 @@ function collectRowKeys(rows) {
 }
 
 function tableExportDataset(dataset) {
-  return { medisSchedule: "medis", inventoryAlerts: "inventory" }[dataset] || dataset;
+  return dataset;
 }
 
 function normalizeRow(row) {
@@ -3781,13 +3782,23 @@ function bindExports() {
   document.querySelectorAll("[data-export]").forEach(button => {
     if (button.dataset.exportBound === "true") return;
     button.dataset.exportBound = "true";
-    button.addEventListener("click", () => exportCsv(button.dataset.export));
+    button.addEventListener("click", () => runReportExport("csv", button.dataset.export));
   });
   document.querySelectorAll("[data-export-pdf]").forEach(button => {
     if (button.dataset.exportPdfBound === "true") return;
     button.dataset.exportPdfBound = "true";
-    button.addEventListener("click", () => exportPdf(button.dataset.exportPdf));
+    button.addEventListener("click", () => runReportExport("pdf", button.dataset.exportPdf));
   });
+}
+
+function runReportExport(format, dataset) {
+  try {
+    if (format === "pdf") exportPdf(dataset);
+    else exportCsv(dataset);
+  } catch (error) {
+    console.error("Report export failed", error);
+    toast("Laporan gagal diekspor. Silakan coba lagi; jika berulang, muat ulang halaman.");
+  }
 }
 
 function bindDeletes() {
@@ -4351,8 +4362,11 @@ function exportCsv(dataset) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `afk-dashboard-${dataset}-${businessToday()}.csv`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  document.body.appendChild(link);
+  try { link.click(); } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
   toast("CSV diekspor: setiap informasi memiliki satu baris, dikelompokkan berdasarkan No. Catatan.");
 }
 
@@ -4361,50 +4375,59 @@ function exportPdf(dataset) {
     toast("Export PDF sedang berjalan. Tutup preview PDF sebelumnya dulu.");
     return;
   }
-
   const sections = getExportSections(dataset).filter(section => section.rows.length);
   if (!sections.length) return toast("Belum ada data untuk diexport.");
-  pdfExportInProgress = true;
-
   const title = `${state.settings.brandName || DEFAULT_DASHBOARD_NAME} - ${exportTitle(dataset)}`;
-  const printedAt = formatIndonesianDate(new Date());
+  // Build before locking: a formatting error must not block later attempts.
+  const html = buildExportDocument(sections, title, formatIndonesianDate(new Date()), exportPeriodLabel());
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
-  frame.style.position = "fixed";
-  frame.style.right = "0";
-  frame.style.bottom = "0";
-  frame.style.width = "0";
-  frame.style.height = "0";
-  frame.style.border = "0";
-  document.body.appendChild(frame);
-
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open();
-  doc.write(buildExportDocument(sections, title, printedAt, exportPeriodLabel()));
-  doc.close();
-
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
   let cleanupTimer = null;
   const cleanupPrintFrame = () => {
     if (cleanupTimer) clearTimeout(cleanupTimer);
     frame.remove();
     pdfExportInProgress = false;
   };
-  frame.contentWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
-  cleanupTimer = setTimeout(cleanupPrintFrame, 60000);
-
-  setTimeout(() => {
-    try {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    } catch (error) {
-      cleanupPrintFrame();
-      toast("Export PDF gagal dibuka. Coba ulangi sekali lagi.");
-    }
-  }, 250);
-  toast("Membuka dialog print. Pilih Save as PDF untuk export PDF.");
+  pdfExportInProgress = true;
+  try {
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument || frame.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    frame.contentWindow.addEventListener("afterprint", cleanupPrintFrame, { once: true });
+    cleanupTimer = setTimeout(cleanupPrintFrame, 60000);
+    setTimeout(() => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (error) {
+        cleanupPrintFrame();
+        toast("Export PDF gagal dibuka. Coba ulangi sekali lagi.");
+      }
+    }, 250);
+    toast("Membuka dialog print. Pilih Save as PDF untuk export PDF.");
+  } catch (error) {
+    cleanupPrintFrame();
+    throw error;
+  }
 }
 
 function getExportSections(dataset) {
+  if (dataset === "integratedOwner" || dataset === "pharmacyReconciliation") {
+    const allowed = dataset === "integratedOwner" ? currentRole === "Owner" : ["Owner", "Manager Finance & Operational"].includes(currentRole);
+    if (!allowed) { toast("Role ini tidak punya akses export data tersebut."); return []; }
+    const rows = dataset === "integratedOwner" ? getIntegratedOwnerControlRows() : getPharmacyReconciliationRows();
+    return [{ title: exportTitle(dataset), dataset, headers: collectRowKeys(rows), rows }];
+  }
+  if (dataset === "medisSchedule" || dataset === "inventoryAlerts") {
+    const source = dataset === "medisSchedule" ? "medis" : "inventory";
+    if (!canViewDataset(source)) { toast("Role ini tidak punya akses export data tersebut."); return []; }
+    const sections = getExportSections(source);
+    return sections.map(section => ({ ...section, title: exportTitle(dataset), rows: section.rows.filter(row => dataset === "medisSchedule" ? !isTreatmentDone(row.status) : stockStatus(row) !== "Aman" || expiringSoon(row)) }));
+  }
+
   if (dataset === "owner" && currentRole !== "Owner") {
     toast("Hanya Owner yang dapat mengekspor ringkasan Owner.");
     return [];
@@ -4725,6 +4748,10 @@ function exportSectionHtml(section) {
 function exportTitle(dataset) {
   return {
     owner: "Executive Overview",
+    integratedOwner: "Rekonsiliasi Antar-Divisi",
+    pharmacyReconciliation: "Rekonsiliasi Barang Apotek",
+    medisSchedule: "Jadwal Treatment",
+    inventoryAlerts: "Alert Stok Menipis dan Kedaluwarsa",
     crm: "CRM Dashboard",
     manager: "Manager Finance & Operational",
     managerMarketingDaily: "Daily Manager Report",
