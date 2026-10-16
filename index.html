@@ -692,7 +692,8 @@ tbody tr:hover {
         <span class="sync-dot"></span>
         <div>
           <strong>Mode Realtime Active</strong>
-          <small id="syncQueueStatus">Tersinkron</small>
+          <small id="syncQueueStatus">Memeriksa sinkronisasi</small>
+          <details id="syncReviewPanel" hidden><summary>Perubahan perlu ditinjau</summary><div id="syncReviewItems" style="max-height:320px;overflow:auto;overflow-wrap:anywhere"></div></details>
           <small>(Developed by Markaz Dakwah Digital)</small>
         </div>
       </div>
@@ -1200,7 +1201,8 @@ function loadState() {
 }
 
 function saveState(options = {}) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch { toast("Cache tampilan penuh. Perubahan yang sudah masuk antrean tetap menunggu konfirmasi server; jangan hapus data browser."); }
   if (!options.skipSync) scheduleAutoSync();
 }
 
@@ -1218,23 +1220,46 @@ function randomId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-function getMutationQueue() {
-  try {
-    const queue = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]");
-    return Array.isArray(queue) ? queue : [];
-  } catch {
-    return [];
+function mutationStorageKey(id) { return `${SYNC_QUEUE_KEY}.item.${encodeURIComponent(id)}`; }
+function mutationAckKey(id) { return `${SYNC_QUEUE_KEY}.ack.${encodeURIComponent(id)}`; }
+function mutationIsAcknowledged(id) { return localStorage.getItem(mutationAckKey(id)) !== null; }
+function storeMutation(mutation) {
+  if (!mutation || !mutation.id) throw new Error("Perubahan tanpa identitas tidak dapat disimpan.");
+  if (mutationIsAcknowledged(mutation.id)) return;
+  const key = mutationStorageKey(mutation.id);
+  const existing = localStorage.getItem(key);
+  if (existing) {
+    const old = JSON.parse(existing);
+    // Retries may update scheduling, never replace the original write intent.
+    mutation = {...old, attempt: Math.max(Number(old.attempt || 0), Number(mutation.attempt || 0)), nextAttemptAt: Math.max(Number(old.nextAttemptAt || 0), Number(mutation.nextAttemptAt || 0)), lastError: mutation.lastError || old.lastError || ""};
   }
+  localStorage.setItem(key, JSON.stringify(mutation));
 }
-
-function setMutationQueue(queue) {
-  try {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
-  } catch (error) {
-    setSyncStatus({ phase: "error", pending: true, lastError: "Penyimpanan antrean perangkat penuh." });
-    throw new Error("Antrean lokal penuh. Jangan tutup aplikasi; hubungi admin untuk menyinkronkan data.");
+function getMutationQueue() {
+  // Migrate only after every legacy item is durable. Do not silently discard corrupt data.
+  const legacyText = localStorage.getItem(SYNC_QUEUE_KEY);
+  if (legacyText) {
+    const legacy = JSON.parse(legacyText);
+    if (!Array.isArray(legacy)) throw new Error("Antrean lama tidak valid; jangan hapus penyimpanan browser.");
+    legacy.forEach(storeMutation);
+    if (localStorage.getItem(SYNC_QUEUE_KEY) === legacyText) localStorage.removeItem(SYNC_QUEUE_KEY);
   }
-  const ownedLength = getOwnedMutationQueue(queue).length;
+  const prefix = `${SYNC_QUEUE_KEY}.item.`;
+  const keys = Array.from({length:localStorage.length}, (_,index) => localStorage.key(index)).filter(key => key && key.startsWith(prefix));
+  return keys.map(key => JSON.parse(localStorage.getItem(key) || "null")).filter(item => item && item.id && !mutationIsAcknowledged(item.id)).sort((a,b) => String(a.clientTime || "").localeCompare(String(b.clientTime || "")));
+}
+function acknowledgeMutations(ids) {
+  ids.forEach(id => {
+    // Write the receipt before removal; stale tabs/messages can no longer resurrect it.
+    localStorage.setItem(mutationAckKey(id), new Date().toISOString());
+    localStorage.removeItem(mutationStorageKey(id));
+    localPendingMutations.delete(id);
+  });
+}
+function setMutationQueue(queue) {
+  try { queue.forEach(storeMutation); }
+  catch (error) { throw new Error("Antrean perangkat belum tersimpan: " + error.message + ". Jangan tutup atau hapus data browser."); }
+  const ownedLength = getOwnedMutationQueue().length;
   setSyncStatus({ queueLength: ownedLength, pending: ownedLength > 0, phase: ownedLength ? "queued" : "synced" });
 }
 
@@ -1251,7 +1276,8 @@ function mutationBelongsToCurrentSession(mutation, owner = currentSyncOwner()) {
   if (!owner || !mutation) return false;
   if (mutation.ownerUserId) return String(mutation.ownerUserId) === owner.userId;
   if (mutation.ownerUsername) return String(mutation.ownerUsername).toLowerCase() === owner.username.toLowerCase();
-  return normalizeRoleName(mutation.ownerRole || mutation.actorRole) === owner.role;
+  // Role alone cannot establish which account owns a queued write.
+  return false;
 }
 
 function getOwnedMutationQueue(queue = getMutationQueue()) {
@@ -1260,27 +1286,22 @@ function getOwnedMutationQueue(queue = getMutationQueue()) {
 }
 
 function getSyncDeadLetters() {
-  try {
-    const rows = JSON.parse(localStorage.getItem(SYNC_DEAD_LETTER_KEY) || "[]");
-    return Array.isArray(rows) ? rows : [];
-  } catch {
-    return [];
-  }
+  const legacy = JSON.parse(localStorage.getItem(SYNC_DEAD_LETTER_KEY) || "[]");
+  const byId = new Map((Array.isArray(legacy) ? legacy : []).map(item => [item.id,item]));
+  const prefix = `${SYNC_DEAD_LETTER_KEY}.item.`;
+  const keys = Array.from({length:localStorage.length}, (_,index) => localStorage.key(index)).filter(key => key && key.startsWith(prefix));
+  keys.forEach(key => { const item = JSON.parse(localStorage.getItem(key) || "null"); if (item?.id) byId.set(item.id,item); });
+  return [...byId.values()];
 }
-
 function addSyncDeadLetters(items = []) {
-  if (!items.length) return;
-  const existing = getSyncDeadLetters();
-  const byId = new Map(existing.map(item => [item.id, item]));
-  items.forEach(item => byId.set(item.id, { ...item, failedAt: new Date().toISOString() }));
-  localStorage.setItem(SYNC_DEAD_LETTER_KEY, JSON.stringify([...byId.values()]));
+  items.forEach(item => localStorage.setItem(`${SYNC_DEAD_LETTER_KEY}.item.${encodeURIComponent(item.id)}`, JSON.stringify({...item, failedAt:new Date().toISOString()})));
 }
 
 function initSyncCoordination() {
   window.addEventListener("storage", event => {
-    if (event.key !== SYNC_QUEUE_KEY) return;
+    if (event.key !== SYNC_QUEUE_KEY && !String(event.key || "").startsWith(`${SYNC_QUEUE_KEY}.`)) return;
     const queue = getMutationQueue();
-    const missingLocal = [...localPendingMutations.values()].filter(mutation => !queue.some(item => item.id === mutation.id));
+    const missingLocal = [...localPendingMutations.values()].filter(mutation => !mutationIsAcknowledged(mutation.id) && !queue.some(item => item.id === mutation.id));
     if (missingLocal.length) setMutationQueue([...queue, ...missingLocal]);
     if (getOwnedMutationQueue().length) scheduleAutoSync(700 + Math.floor(Math.random() * 900));
   });
@@ -1288,7 +1309,7 @@ function initSyncCoordination() {
   syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
   syncChannel.addEventListener("message", event => {
     const mutation = event.data?.mutation;
-    if (!mutation?.id) return;
+    if (!mutation?.id || mutationIsAcknowledged(mutation.id)) return;
     const queue = getMutationQueue();
     const merged = [...queue];
     [...localPendingMutations.values(), mutation].forEach(item => {
@@ -1338,9 +1359,8 @@ function enqueueSyncMutation(dataset, type, row = {}, previousRow = null) {
   };
   const queue = getMutationQueue();
   if (queue.length >= 600) throw new Error("Antrean lokal mencapai batas aman. Sinkronkan data sebelum menambah laporan baru.");
+  setMutationQueue([mutation]);
   localPendingMutations.set(mutation.id, mutation);
-  queue.push(mutation);
-  setMutationQueue(queue);
   syncChannel?.postMessage({ mutation });
   setSyncStatus({ phase: "queued", pending: true, lastQueuedAt: new Date().toISOString() });
   setTimeout(() => toast("Data tersimpan di perangkat dan menunggu sinkronisasi."), 0);
@@ -1812,8 +1832,24 @@ function getSyncStatus() {
 
 function setSyncStatus(nextStatus) {
   const status = { ...getSyncStatus(), ...nextStatus };
-  localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify(status));
+  let review = [], unclaimed = 0;
+  try {
+    review = getSyncDeadLetters().filter(item => mutationBelongsToCurrentSession(item));
+    unclaimed = getMutationQueue().filter(item => !item.ownerUserId && !item.ownerUsername).length;
+  } catch { status.phase = "error"; status.lastError = "Antrean lokal perlu diperiksa; jangan hapus data browser."; }
+  if (review.length || unclaimed) {
+    status.phase = "error";
+    status.lastError = `${review.length} perubahan ditolak/perlu ditinjau; ${unclaimed} antrean lama belum memiliki identitas akun.`;
+  }
+  const panel = document.getElementById("syncReviewPanel");
+  const detail = document.getElementById("syncReviewItems");
+  if (panel && detail) {
+    panel.hidden = !review.length && !unclaimed;
+    detail.innerHTML = (unclaimed ? `<p>${unclaimed} antrean lama belum memiliki identitas akun. Hubungi admin; data tidak dikirim atas nama akun lain.</p>` : "") + review.map(item => `<article><strong>${escapeHtml(item.dataset || "Laporan")}</strong><p>${escapeHtml(item.lastError || "Perlu ditinjau")}</p><small>${escapeHtml(item.clientTime || "")}</small><details><summary>Lihat input tersimpan</summary><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(item.row || {}, null, 2))}</pre></details><p>Bandingkan dengan laporan terbaru sebelum memperbaiki input. Perubahan ini tidak dikirim ulang otomatis.</p></article>`).join("");
+  }
+  try { localStorage.setItem(SYNC_STATUS_KEY, JSON.stringify(status)); } catch { /* Status cache is advisory; durable mutations are stored separately. */ }
   const label = document.getElementById("syncQueueStatus");
+  if (label) label.title = status.lastError || "";
   if (label) label.textContent = ({ queued: "Menunggu sinkronisasi", syncing: "Sedang mengirim", synced: "Tersinkron", error: "Gagal / perlu tindakan" })[status.phase] || (status.pending ? "Menunggu sinkronisasi" : "Tersinkron");
 }
 
@@ -2651,8 +2687,8 @@ async function addManager(data, fileFields = {}) {
   if (["monthlyTarget", "verifiedRevenue", "outstandingBalance"].some(key => num(data[key]) < 0)) throw new Error("Target, omzet, dan outstanding tidak boleh negatif.");
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "manager", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.manager.unshift(row);
   enqueueLocalUpsert("manager", row);
+  state.manager.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan Manager Finance & Operational dan media Drive berhasil ditambahkan." : "Laporan Manager Finance & Operational berhasil ditambahkan.");
@@ -2764,8 +2800,8 @@ function ownerEscalationForm(formId = "ownerEscalationForm", managerLabel = "Nam
 
 async function addManagerMarketingDaily(data) {
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.managerMarketingDaily.unshift(row);
   enqueueLocalUpsert("managerMarketingDaily", row);
+  state.managerMarketingDaily.unshift(row);
   saveState();
   renderAll();
   toast("Daily Manager Report berhasil ditambahkan.");
@@ -2773,8 +2809,8 @@ async function addManagerMarketingDaily(data) {
 
 async function addPatientCommand(data) {
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.patientCommand.unshift(row);
   enqueueLocalUpsert("patientCommand", row);
+  state.patientCommand.unshift(row);
   saveState();
   renderAll();
   toast("Patient Command berhasil ditambahkan.");
@@ -2782,8 +2818,8 @@ async function addPatientCommand(data) {
 
 async function addManagerDecision(data) {
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.managerDecisionLog.unshift(row);
   enqueueLocalUpsert("managerDecisionLog", row);
+  state.managerDecisionLog.unshift(row);
   saveState();
   renderAll();
   toast("Decision Log berhasil ditambahkan.");
@@ -2791,8 +2827,8 @@ async function addManagerDecision(data) {
 
 async function addOwnerEscalation(data) {
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.ownerEscalation.unshift(row);
   enqueueLocalUpsert("ownerEscalation", row);
+  state.ownerEscalation.unshift(row);
   saveState();
   renderAll();
   toast("Owner Escalation berhasil ditambahkan.");
@@ -2916,8 +2952,8 @@ async function addCrm(data, fileFields = {}) {
   data.voiceOfPatient = data.voiceOfPatient || data.note || "";
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "crm", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.crm.unshift(row);
   enqueueLocalUpsert("crm", row);
+  state.crm.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Lead CRM dan media Drive berhasil ditambahkan." : "Lead CRM berhasil ditambahkan.");
@@ -2992,8 +3028,8 @@ async function addMarketing(data, fileFields = {}) {
   data.roas = data.roas || safeDiv(data.revenue, data.spend);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "marketing", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.marketing.unshift(row);
   enqueueLocalUpsert("marketing", row);
+  state.marketing.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan marketing dan media Drive berhasil ditambahkan." : "Laporan marketing berhasil ditambahkan.");
@@ -3053,8 +3089,8 @@ async function addContent(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","views","reach","likes","comments","shares","saves","leads"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "content", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.content.unshift(row);
   enqueueLocalUpsert("content", row);
+  state.content.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Konten dan media Drive berhasil ditambahkan." : "Konten berhasil ditambahkan.");
@@ -3107,8 +3143,8 @@ async function addDoctor(data, fileFields = {}) {
   data.dailyExpense = num(data.dailyExpense);
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "doctor", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.doctor.unshift(row);
   enqueueLocalUpsert("doctor", row);
+  state.doctor.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Laporan dokter dan media Drive berhasil ditambahkan." : "Laporan dokter berhasil ditambahkan.");
@@ -3174,8 +3210,8 @@ async function addMedis(data, fileFields = {}) {
     data.mediaLinks = uploadedFiles.map(file => file.url).filter(Boolean).join("\n");
   }
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.medis.unshift(row);
   enqueueLocalUpsert("medis", row);
+  state.medis.unshift(row);
   saveState();
   renderAll();
   toast(mediaFiles.length ? "Laporan medis dan media Drive berhasil ditambahkan." : "Laporan medis berhasil ditambahkan.");
@@ -3282,8 +3318,8 @@ async function addInventory(data, fileFields = {}) {
   ["dailyOmzet","dailyExpense","initial","inQty","outQty","pharmacyQty","minimum"].forEach(key => data[key] = num(data[key]));
   data.mediaLinks = await uploadDashboardMedia(fileFields.mediaFiles || [], "inventory", data);
   const row = { ...data, ownerNote: ownerNoteValue(data.ownerNote) };
-  state.inventory.unshift(row);
   enqueueLocalUpsert("inventory", row);
+  state.inventory.unshift(row);
   saveState();
   renderAll();
   toast(data.mediaLinks ? "Data inventory dan media Drive berhasil ditambahkan." : "Data inventory berhasil ditambahkan.");
@@ -3534,6 +3570,7 @@ function renderSettings() {
     } catch (error) {
       toast(error.message || "Settings gagal disimpan.");
     } finally {
+      form.dataset.submitting = "false";
       if (submitButton) submitButton.disabled = false;
     }
   });
@@ -3665,7 +3702,7 @@ function tableCell(dataset, row, col) {
   if (col === "mediaLinks") return `<td>${mediaLinks(value)}</td>`;
   if (["status","category","stockStatus"].includes(col)) return `<td><span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span></td>`;
   if (OPTIONAL_FINANCE_FIELDS.has(col)) return `<td>${value === "" || value == null ? "Belum dilaporkan" : money(num(value))}</td>`;
-  if (["revenue","spend","adSpend","otherExpense","productSalePrice","patientTreatmentPrice","dailyTarget","dailyRevenue","dailyOmzet","dailyExpense","monthlyTarget","totalRevenue","teamBonus","cpc","cpl","cpr","upsales"].includes(col)) return `<td>${money(num(value))}</td>`;
+  if (MONEY_REPORT_FIELDS.has(col)) return `<td>${money(num(value))}</td>`;
   if (["ctr"].includes(col)) return `<td>${pct(num(value))}</td>`;
   if (["roas"].includes(col)) return `<td>${num(value).toFixed(1)}x</td>`;
   return `<td>${escapeHtml(value)}</td>`;
@@ -3677,10 +3714,12 @@ function bindForm(id, handler) {
   bindMoneyInputs(form);
   form.addEventListener("submit", async event => {
     event.preventDefault();
+    if (form.dataset.submitting === "true") return;
     const ownerNoteDataset = form.dataset.ownerNoteDataset;
     if (!ownerNoteDataset && form.querySelector("fieldset").disabled) return;
     const submitButton = form.querySelector(".primary-button");
     if (submitButton) submitButton.disabled = true;
+    form.dataset.submitting = "true";
     try {
       if (ownerNoteDataset) {
         saveOwnerNoteToLatestReport(ownerNoteDataset, formValues(form));
@@ -3690,6 +3729,7 @@ function bindForm(id, handler) {
     } catch (error) {
       toast(error.message || "Form gagal diproses.");
     } finally {
+      form.dataset.submitting = "false";
       if (submitButton) submitButton.disabled = false;
     }
   });
@@ -3813,8 +3853,8 @@ function openEditReport(dataset, index) {
       nextRow[key] = normalizeEditValue(key, value);
     });
     ensureRecordIdentity(nextRow, dataset);
-    state[dataset][index] = nextRow;
     enqueueSyncMutation(dataset, "update", nextRow, previousRow);
+    state[dataset][index] = nextRow;
     saveState();
     modal.close();
     renderAll();
@@ -3998,12 +4038,13 @@ function makeChart(id, type, labels, values, fill = false, secondValues = null) 
           borderColor: "rgba(255,255,255,.18)",
           borderWidth: 1,
           displayColors: true,
-          padding: 12
+          padding: 12,
+          callbacks: { label: context => `${context.dataset.label || ""}: ${["revenueChart", "spendRevenueChart", "cplChart"].includes(id) ? money(context.parsed.y) : formatNumber(context.parsed.y ?? context.parsed)}` }
         }
       },
       scales: type === "doughnut" ? undefined : {
         x: { grid: { color: "rgba(118,106,120,.12)" } },
-        y: { grid: { color: "rgba(118,106,120,.14)" } }
+        y: { grid: { color: "rgba(118,106,120,.14)" }, ticks: { callback: value => ["revenueChart", "spendRevenueChart", "cplChart"].includes(id) ? money(value) : formatNumber(value) } }
       }
     }
   });
@@ -4650,8 +4691,8 @@ function exportTitle(dataset) {
 }
 
 function formatExportValue(key, value) {
-  if (value === undefined || value === null) return "";
-  if (["revenue", "spend", "adSpend", "otherExpense", "productSalePrice", "patientTreatmentPrice", "dailyTarget", "dailyRevenue", "dailyOmzet", "dailyExpense", "monthlyTarget", "totalRevenue", "teamBonus", "cpc", "cpl", "cpr", "upsales"].includes(key)) return money(num(value));
+  if (value === undefined || value === null || value === "") return "";
+  if (MONEY_REPORT_FIELDS.has(key)) return money(num(value));
   if (key === "ctr") return pct(num(value));
   if (key === "roas") return `${num(value).toFixed(1)}x`;
   if (key === "mediaLinks") return String(value).split(/\n|,\s*/).map(x => x.trim()).filter(Boolean).join(" | ");
@@ -4732,14 +4773,13 @@ async function flushMutationQueueOwned(options = {}) {
     setSyncStatus({ phase: "queued", pending: true, lastError: "Perangkat offline. Data tetap aman di antrean lokal.", queueLength: getOwnedMutationQueue().length });
     return false;
   }
+  const queue = getOwnedMutationQueue();
   if (!acquireSyncLock()) {
     setSyncStatus({ phase: "queued", pending: true, lastError: "Tab lain sedang menyinkronkan data." });
     scheduleAutoSync(900 + Math.floor(Math.random() * 1800));
     return false;
   }
   syncInProgress = true;
-
-  const queue = getOwnedMutationQueue();
   const syncSessionGeneration = datasetSessionGeneration;
   const now = Date.now();
   const ready = queue.filter(item => Number(item.nextAttemptAt || 0) <= now).slice(0, SYNC_BATCH_SIZE);
@@ -4799,7 +4839,7 @@ async function flushMutationQueueOwned(options = {}) {
     }));
     addSyncDeadLetters(deadLetters);
     const removeIds = new Set([...acceptedIds, ...permanentIds]);
-    removeIds.forEach(id => localPendingMutations.delete(id));
+    acknowledgeMutations(removeIds);
     const remaining = getMutationQueue().filter(item => !removeIds.has(item.id)).map(item => retryableIds.has(item.id)
       ? { ...item, attempt: Number(item.attempt || 0) + 1, nextAttemptAt: retryAt, lastError: resultById.get(item.id)?.error || "Gangguan sementara backend." }
       : item
@@ -4816,6 +4856,11 @@ async function flushMutationQueueOwned(options = {}) {
       nextRetryAt: retryableIds.size ? retryAt : 0,
       lastBatchSize: ready.length
     });
+    if (!ownedRemaining.length && acceptedIds.size) setTimeout(() => {
+      if (syncSessionGeneration === datasetSessionGeneration && state.session.authenticated && !getOwnedMutationQueue().length) {
+        startBackgroundDataLoad({force:true, source:"write-confirmed", datasets:[...new Set(ready.filter(item => acceptedIds.has(item.id)).map(item => item.dataset))].filter(dataset => DATASET_KEYS.includes(dataset) && canViewDataset(dataset))});
+      }
+    }, 0);
     if (ownedRemaining.length) scheduleAutoSync(retryableIds.size ? retryAt - Date.now() : 800 + Math.floor(Math.random() * 1200));
     if (!options.silent) toast(deadLetters.length ? "Sebagian perubahan perlu ditinjau. Data tersimpan dalam daftar gagal." : (ownedRemaining.length ? "Sebagian perubahan masih menunggu konfirmasi server." : "Data berhasil tersinkron ke server."));
     return true;
@@ -5115,14 +5160,7 @@ function formatNumber(value) { return new Intl.NumberFormat("id-ID").format(num(
 function displayKpiValue(value) { return typeof value === "number" ? formatNumber(value) : value; }
 function moneyOrMissing(value, fallbackText) { return num(value) > 0 ? compactMoney(value) : fallbackText; }
 function targetAchievementLabel(k) { return num(k.monthlyTarget) > 0 ? (k.monthlyRevenue === null ? "Omzet belum dilaporkan" : pct(safeDiv(k.monthlyRevenue, k.monthlyTarget))) : "Belum ada target"; }
-function compactMoney(value) {
-  const amount = num(value);
-  const abs = Math.abs(amount);
-  if (abs >= 1000000000) return `Rp ${(amount / 1000000000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} M`;
-  if (abs >= 1000000) return `Rp ${(amount / 1000000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt`;
-  if (abs >= 1000) return `Rp ${(amount / 1000).toLocaleString("id-ID", { maximumFractionDigits: 0 })} rb`;
-  return money(amount);
-}
+function compactMoney(value) { return money(num(value)); }
 function nextId(prefix, number) { return `${prefix}-${number}`; }
 function label(key, dataset = "") {
   if (key === "userName") return userNameLabel(dataset);
