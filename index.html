@@ -4331,21 +4331,29 @@ function kanban() {
     </div>`).join("");
 }
 
+function buildExportCsv(sections) {
+  const lines = [["No. Catatan", "Laporan", "Tanggal", "Penanggung Jawab", "Informasi", "Nilai"]];
+  let record = 0;
+  sections.forEach(section => section.rows.forEach(row => {
+    record++;
+    const person = row.managerName || row.doctorName || row.userName || "";
+    getExportHeaders(section).forEach(key => {
+      lines.push([record, section.title, formatExportValue("date", row.date), person, label(key, section.dataset), formatExportValue(key, row[key])]);
+    });
+  }));
+  return record ? "\uFEFF" + lines.map(line => line.map(csvCell).join(",")).join("\r\n") + "\r\n" : "";
+}
+
 function exportCsv(dataset) {
-  const csv = getExportSections(dataset).map(section => {
-    if (!section.rows.length) return "";
-    const headers = section.headers.length ? section.headers : collectRowKeys(section.rows);
-    const lines = section.rows.map(row => headers.map(key => csvCell(formatExportValue(key, row[key]))).join(","));
-    return [`# ${section.title}`, headers.map(key => csvCell(label(key, section.dataset))).join(","), ...lines].join("\n");
-  }).filter(Boolean).join("\n\n");
+  const csv = buildExportCsv(getExportSections(dataset));
   if (!csv) return toast("Belum ada data untuk diexport.");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `afk-dashboard-${dataset}-${new Date().toISOString().slice(0,10)}.csv`;
+  link.download = `afk-dashboard-${dataset}-${businessToday()}.csv`;
   link.click();
-  URL.revokeObjectURL(link.href);
-  toast("CSV berhasil diexport.");
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  toast("CSV diekspor: setiap informasi memiliki satu baris, dikelompokkan berdasarkan No. Catatan.");
 }
 
 function exportPdf(dataset) {
@@ -4360,7 +4368,6 @@ function exportPdf(dataset) {
 
   const title = `${state.settings.brandName || DEFAULT_DASHBOARD_NAME} - ${exportTitle(dataset)}`;
   const printedAt = formatIndonesianDate(new Date());
-  const sectionHtml = sections.map(section => exportSectionHtml(section)).join("");
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.position = "fixed";
@@ -4373,33 +4380,7 @@ function exportPdf(dataset) {
 
   const doc = frame.contentDocument || frame.contentWindow.document;
   doc.open();
-  doc.write(`<!doctype html>
-    <html lang="id">
-    <head>
-      <meta charset="utf-8">
-      <title>${escapeHtml(title)}</title>
-      <style>
-        @page { size: A4 landscape; margin: 12mm; }
-        * { box-sizing: border-box; }
-        body { color: #1f1424; font-family: Arial, sans-serif; margin: 0; }
-        header { border-bottom: 2px solid #f81894; margin-bottom: 18px; padding-bottom: 10px; }
-        h1 { font-size: 22px; margin: 0 0 4px; }
-        h2 { color: #f81894; font-size: 15px; margin: 18px 0 8px; }
-        p { color: #6d6072; font-size: 11px; margin: 0; }
-        table { border-collapse: collapse; margin-bottom: 12px; table-layout: fixed; width: 100%; }
-        th, td { border: 1px solid #ead4df; font-size: 9px; padding: 6px; text-align: left; vertical-align: top; word-break: break-word; }
-        th { background: #fff0f7; color: #2f2434; }
-        tr:nth-child(even) td { background: #fffafd; }
-      </style>
-    </head>
-    <body>
-      <header>
-        <h1>${escapeHtml(title)}</h1>
-        <p>Dicetak ${escapeHtml(printedAt)}</p>
-      </header>
-      ${sectionHtml}
-    </body>
-    </html>`);
+  doc.write(buildExportDocument(sections, title, printedAt, exportPeriodLabel()));
   doc.close();
 
   let cleanupTimer = null;
@@ -4436,7 +4417,11 @@ function getExportSections(dataset) {
   const keys = dataset === "all" ? getAccessibleReportDatasets() : [dataset];
   return keys.map(key => {
     const sourceRows = activePage === "reports" ? filterRowsByDate(state[key] || []) : (state[key] || []);
-    const rows = sourceRows.map(normalizeRow);
+    const rows = sourceRows.map(row => {
+      if (key === "marketing") return normalizeRow(row);
+      if (key === "inventory") return { ...row, finalStock: finalStock(row), stockStatus: stockStatus(row) };
+      return { ...row };
+    });
     const headers = rows.length ? collectRowKeys(rows) : [];
     return { title: exportTitle(key), dataset: key, headers, rows };
   });
@@ -4689,15 +4674,52 @@ function getOwnerExportSections() {
   ];
 }
 
-function exportSectionHtml(section) {
+function getExportHeaders(section) {
   const headers = section.headers.length ? section.headers : collectRowKeys(section.rows);
-  return `<section>
-    <h2>${escapeHtml(section.title)}</h2>
-    <table>
-      <thead><tr>${headers.map(key => `<th>${escapeHtml(label(key, section.dataset))}</th>`).join("")}</tr></thead>
-      <tbody>${section.rows.map(row => `<tr>${headers.map(key => `<td>${escapeHtml(formatExportValue(key, row[key]))}</td>`).join("")}</tr>`).join("")}</tbody>
-    </table>
-  </section>`;
+  return headers.filter(key => !INTERNAL_FIELDS.has(key) && section.rows.some(row => row[key] !== undefined && row[key] !== null && row[key] !== ""));
+}
+
+function exportPeriodLabel() {
+  if (activePage !== "reports") return "Seluruh data yang tersedia pada halaman ini";
+  if (!reportFilters.start && !reportFilters.end) return "Seluruh tanggal";
+  return `${reportFilters.start ? formatIndonesianDate(reportFilters.start) : "Awal data"} sampai ${reportFilters.end ? formatIndonesianDate(reportFilters.end) : "Tanggal terakhir"}`;
+}
+
+function buildExportDocument(sections, title, printedAt, period) {
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 16mm 14mm; @bottom-right { content: "Halaman " counter(page); font: 9pt Arial, sans-serif; color: #5d5262; } }
+    * { box-sizing: border-box; }
+    body { color: #241d29; font: 10.5pt/1.5 Arial, sans-serif; margin: 0; }
+    header { border-bottom: 3px solid #b21869; padding-bottom: 12px; margin-bottom: 20px; }
+    h1 { font-size: 20pt; line-height: 1.2; margin: 0 0 10px; }
+    h2 { font-size: 15pt; color: #931352; margin: 0 0 6px; break-after: avoid; }
+    h3 { font-size: 11pt; margin: 18px 0 6px; break-after: avoid; }
+    p { margin: 4px 0; } .meta, .note { color: #5d5262; font-size: 9pt; }
+    section + section { break-before: page; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; table-layout: fixed; }
+    th, td { padding: 8px 10px; border: 1px solid #ddd2da; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
+    th { background: #f5e9f0; font-weight: 600; } thead { display: table-header-group; }
+    tr { break-inside: avoid; } tbody tr:nth-child(even) { background: #faf7f9; }
+    .details th { width: 34%; } .details td { width: 66%; } .record-title { color: #931352; background: #fff; }
+    .number { text-align: right; font-variant-numeric: tabular-nums; }
+    .compact { font-size: 10pt; } .section-summary { margin-bottom: 12px; }
+    @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  </style></head><body>
+  <header><h1>${escapeHtml(title)}</h1><p class="meta">Dicetak ${escapeHtml(printedAt)}</p><p class="meta">Periode: ${escapeHtml(period)}</p>
+  <p class="meta">${sections.length} bagian laporan • ${sections.reduce((sum, section) => sum + section.rows.length, 0)} catatan</p>
+  <p class="note">Tanda — berarti belum diisi. Nilai 0 berarti angka nol yang tercatat. Kolom yang seluruhnya kosong tidak ditampilkan.</p></header>
+  ${sections.map(exportSectionHtml).join("")}</body></html>`;
+}
+
+function exportSectionHtml(section) {
+  const headers = getExportHeaders(section);
+  const cell = (key, row) => escapeHtml(formatExportValue(key, row[key]) || (row[key] === 0 ? "0" : "—"));
+  const numeric = key => MONEY_REPORT_FIELDS.has(key) ? ' class="number"' : "";
+  const table = headers.length <= 4
+    ? `<table class="compact"><thead><tr>${headers.map(key => `<th>${escapeHtml(label(key, section.dataset))}</th>`).join("")}</tr></thead><tbody>${section.rows.map(row => `<tr>${headers.map(key => `<td${numeric(key)}>${cell(key,row)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+    : section.rows.map((row, index) => `<article><table class="details"><colgroup><col style="width:34%"><col style="width:66%"></colgroup><thead><tr><th colspan="2" class="record-title">${escapeHtml(section.title)} • Catatan ${index + 1}${row.date ? ` • ${escapeHtml(formatExportValue("date", row.date))}` : ""}</th></tr><tr><th>Informasi</th><th>Rincian</th></tr></thead><tbody>${headers.map(key => `<tr><th scope="row">${escapeHtml(label(key, section.dataset))}</th><td${numeric(key)}>${cell(key,row)}</td></tr>`).join("")}</tbody></table></article>`).join("");
+  return `<section><h2>${escapeHtml(section.title)}</h2><p class="meta section-summary">${section.rows.length} catatan</p>${table}</section>`;
 }
 
 function exportTitle(dataset) {
@@ -4714,13 +4736,13 @@ function exportTitle(dataset) {
     doctor: "Dashboard Dokter",
     medis: "Dashboard Tim Medis",
     inventory: "Dashboard Inventory",
-    all: "Reports"
+    all: "Laporan Seluruh Divisi"
   }[dataset] || sectionLabel(dataset);
 }
 
 function formatExportValue(key, value) {
   if (value === undefined || value === null || value === "") return "";
-  if (DATE_REPORT_FIELDS.has(key) || ["clientTime", "failedAt", "_createdAt", "_updatedAt"].includes(key)) return formatIndonesianDate(value);
+  if (DATE_REPORT_FIELDS.has(key) || ["clientTime", "failedAt", "_createdAt", "_updatedAt"].includes(key)) return formatIndonesianDate(value, { dateOnly: DATE_REPORT_FIELDS.has(key) });
   if (MONEY_REPORT_FIELDS.has(key)) return money(num(value));
   if (key === "ctr") return pct(num(value));
   if (key === "roas") return `${num(value).toFixed(1)}x`;
