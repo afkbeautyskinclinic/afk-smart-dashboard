@@ -28,7 +28,7 @@ test('a shared role is never enough to claim another account queue',()=>{
 });
 test('money values use full Indonesian grouping in KPIs, finance cells, and exports',()=>{
  const fields=html.match(/const MONEY_REPORT_FIELDS = new Set\((\[[^\n]+\])\);/)[1];
- const c={Intl,num:v=>Number(v)||0,MONEY_REPORT_FIELDS:new Set(JSON.parse(fields)),OPTIONAL_FINANCE_FIELDS:new Set(['monthlyTarget']),escapeHtml:String};
+ const c={DATE_REPORT_FIELDS:new Set(),Intl,num:v=>Number(v)||0,MONEY_REPORT_FIELDS:new Set(JSON.parse(fields)),OPTIONAL_FINANCE_FIELDS:new Set(['monthlyTarget']),escapeHtml:String};
  vm.runInNewContext(html.slice(html.indexOf('function money('),html.indexOf('function nextId('))+html.slice(html.indexOf('function tableCell('),html.indexOf('function bindForm('))+html.slice(html.indexOf('function formatExportValue('),html.indexOf('function csvCell(')),c);
  for(const value of [1000,10000,100000,1250000,1000000000,-1250000])assert.match(c.compactMoney(value),/\d\.\d{3}/);
  for(const key of ['annualBudget','monthlyBudget','cashInPatient','cashOutSalary','cashBalance','profitLoss','verifiedRevenue','outstandingBalance']){assert.match(c.tableCell('manager',{[key]:1250000},key),/1\.250\.000/);assert.match(c.formatExportValue(key,1250000),/1\.250\.000/);}
@@ -53,7 +53,7 @@ test('all division add handlers persist an outbox entry before inserting a visib
 });
 test('rejected-input panel is account scoped, escaped, and keeps an error visible after later sync',()=>{
  const nodes={syncReviewPanel:{},syncReviewItems:{},syncQueueStatus:{}};
- const c={getSyncStatus:()=>({}),getSyncDeadLetters:()=>[{ownerUserId:'a',dataset:'crm',row:{name:'<script>bad</script>'}},{ownerUserId:'b',dataset:'crm',row:{name:'OTHER-ACCOUNT'}}],mutationBelongsToCurrentSession:x=>x.ownerUserId==='a',getMutationQueue:()=>[],document:{getElementById:id=>nodes[id]},localStorage:{setItem:()=>{}},SYNC_STATUS_KEY:'status',escapeHtml:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};
+ const c={formatIndonesianDate:String,getSyncStatus:()=>({}),getSyncDeadLetters:()=>[{ownerUserId:'a',dataset:'crm',row:{name:'<script>bad</script>'}},{ownerUserId:'b',dataset:'crm',row:{name:'OTHER-ACCOUNT'}}],mutationBelongsToCurrentSession:x=>x.ownerUserId==='a',getMutationQueue:()=>[],document:{getElementById:id=>nodes[id]},localStorage:{setItem:()=>{}},SYNC_STATUS_KEY:'status',escapeHtml:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};
  vm.runInNewContext(html.slice(html.indexOf('function setSyncStatus('),html.indexOf('function migrateTreatmentNames(')),c);c.setSyncStatus({phase:'synced'});
  assert.equal(nodes.syncReviewPanel.hidden,false);assert.match(nodes.syncQueueStatus.textContent,/perlu tindakan/);assert.ok(!nodes.syncReviewItems.innerHTML.includes('OTHER-ACCOUNT'));assert.ok(!nodes.syncReviewItems.innerHTML.includes('<script>'));
 });
